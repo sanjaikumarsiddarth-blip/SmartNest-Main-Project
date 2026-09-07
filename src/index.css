@@ -1,0 +1,425 @@
+:root {
+  --ink: #0D1B2A;
+  --slate: #3D5A73;
+  --mist: #EDF2F7;
+  --white: #FFFFFF;
+  --teal: #2A9D8F;
+  --teal-light: #E6F4F2;
+  --teal-dark: #1F7A6F;
+  --amber: #E9C46A;
+  --rose: #E76F51;
+  --border: #DDE4EE;
+
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-card: 16px;
+  --radius-modal: 20px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 2px 8px rgba(13, 27, 42, 0.04);
+  --shadow-card: 0 2px 12px rgba(13, 27, 42, 0.06);
+  --shadow-card-hover: 0 4px 24px rgba(13, 27, 42, 0.10);
+  --shadow-lg: 0 10px 30px rgba(13, 27, 42, 0.12);
+  --shadow-modal: 0 20px 40px rgba(13, 27, 42, 0.16);
+
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background-color: var(--mist);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* Typography rules */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.font-display {
+  font-family: var(--font-display) !important;
+  font-weight: 400 !important;
+}
+
+/* Page Entrance Animation */
+@keyframes fadeUpPage {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-entrance {
+  animation: fadeUpPage 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .page-entrance {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Accessible focus ring */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--teal) !important;
+  outline-offset: 2px !important;
+}
+
+/* Common Card Style */
+.smartnest-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.smartnest-card-hover:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* Button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--teal);
+  color: var(--white);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #23857a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(42, 157, 143, 0.3);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--teal);
+  border: 1.5px solid var(--teal);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--teal-light);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(42, 157, 143, 0.15);
+}
+
+.btn-destructive {
+  background-color: var(--rose);
+  color: var(--white);
+}
+
+.btn-destructive:hover:not(:disabled) {
+  background-color: #cf5c3f;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(231, 111, 81, 0.3);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--slate);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--teal-light);
+  color: var(--teal);
+  transform: translateY(-1.5px);
+}
+
+/* ── Interactive Navigation Link Micro-Interactions & Outer Layer Box ── */
+.nav-link-interactive {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--slate);
+  background-color: transparent;
+  border: 1.5px solid transparent;
+  transition: all 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.nav-link-interactive svg {
+  stroke: currentColor;
+  transition: stroke var(--transition-fast);
+}
+
+/* Hover on inactive link: soft teal-light background, rich teal text and icon */
+.nav-link-interactive:hover {
+  color: var(--teal) !important;
+  background-color: var(--teal-light) !important;
+  border-color: rgba(42, 157, 143, 0.45) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(42, 157, 143, 0.18);
+}
+
+.nav-link-interactive:hover svg {
+  stroke: var(--teal) !important;
+}
+
+/* Active link: solid teal background with crisp white text & icon */
+.nav-link-interactive.active,
+.nav-link-interactive:active {
+  background-color: var(--teal) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border-color: var(--teal) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 3.5px rgba(42, 157, 143, 0.28), 0 6px 20px rgba(42, 157, 143, 0.38);
+  animation: navBoxBloom 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nav-link-interactive.active svg,
+.nav-link-interactive:active svg {
+  stroke: #ffffff !important;
+}
+
+/* Hover on active link: rich dark teal background so white text & icon remain 100% visible */
+.nav-link-interactive.active:hover {
+  background-color: var(--teal-dark) !important;
+  border-color: var(--teal-dark) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(42, 157, 143, 0.35), 0 8px 24px rgba(42, 157, 143, 0.45);
+}
+
+.nav-link-interactive.active:hover svg {
+  stroke: #ffffff !important;
+}
+
+@keyframes navBoxBloom {
+  0% {
+    transform: scale(0.94) translateY(0);
+    box-shadow: 0 0 0 0 rgba(42, 157, 143, 0.6), 0 0 0 rgba(42, 157, 143, 0);
+  }
+  50% {
+    transform: scale(1.03) translateY(-2px);
+    box-shadow: 0 0 0 5px rgba(42, 157, 143, 0.35), 0 8px 22px rgba(42, 157, 143, 0.42);
+  }
+  100% {
+    transform: scale(1) translateY(-2px);
+    box-shadow: 0 0 0 3.5px rgba(42, 157, 143, 0.28), 0 6px 20px rgba(42, 157, 143, 0.38);
+  }
+}
+
+/* Primary CTA Button Hover in Nav */
+.btn-nav-cta {
+  border: 1.5px solid transparent;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+
+.btn-nav-cta:hover,
+.btn-nav-cta.active {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 3.5px rgba(42, 157, 143, 0.28), 0 6px 20px rgba(42, 157, 143, 0.38);
+  animation: navBoxBloom 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-nav-cta:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Top Demo Bar Pill Buttons Hover */
+.demo-pill-btn {
+  transition: all 150ms ease;
+  border: 1px solid transparent;
+}
+
+.demo-pill-btn:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.35);
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.demo-pill-btn:active {
+  transform: translateY(0);
+}
+
+/* Brand Logo Interactive Hover */
+.brand-logo-interactive {
+  transition: transform var(--transition-fast);
+}
+
+.brand-logo-interactive:hover {
+  transform: translateY(-1px);
+}
+
+.brand-logo-interactive:hover .brand-logo-icon {
+  transform: scale(1.06);
+  box-shadow: 0 4px 14px rgba(42, 157, 143, 0.25);
+}
+
+.brand-logo-icon {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+/* Form Inputs */
+.smartnest-input {
+  width: 100%;
+  padding: 10px 14px;
+  background-color: var(--mist);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.smartnest-input:focus {
+  background-color: var(--white);
+  border-color: var(--teal);
+}
+
+.smartnest-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate);
+  margin-bottom: 6px;
+}
+
+/* Pill Badges */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.badge-teal {
+  background-color: var(--teal-light);
+  color: var(--teal);
+}
+
+.badge-amber {
+  background-color: #fdf6e2;
+  color: #9c7b1d;
+  border: 1px solid #f6e6aa;
+}
+
+.badge-rose {
+  background-color: #fdeee9;
+  color: var(--rose);
+  border: 1px solid #f8cdbe;
+}
+
+.badge-slate {
+  background-color: var(--mist);
+  color: var(--slate);
+  border: 1px solid var(--border);
+}
+
+/* Shimmer animation for Skeleton */
+@keyframes shimmerAnimation {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #EDF2F7 25%, #E2E8F0 50%, #EDF2F7 75%);
+  background-size: 200% 100%;
+  animation: shimmerAnimation 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Base layout containers */
+.container-main {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+@media (max-width: 768px) {
+  .container-main {
+    padding: 0 16px;
+  }
+
+  .desktop-nav {
+    display: none !important;
+  }
+
+  .mobile-hamburger {
+    display: flex !important;
+  }
+
+  .mobile-bottom-bar {
+    display: flex !important;
+  }
+}
+
