@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { UserPlus, User, Mail, Lock, CheckCircle2 } from 'lucide-react';
+import { UserPlus, User, Mail, Lock, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 export const RegisterPage = () => {
   const { register, getDashboardPath } = useAuth();
@@ -13,6 +13,8 @@ export const RegisterPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [role, setRole] = useState('buyer'); // 'buyer' | 'seller'
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -44,12 +46,20 @@ export const RegisterPage = () => {
     setSubmitting(true);
     setErrors({});
     try {
-      const user = await register(name, email, password, role);
+      const user = await register({
+        name,
+        email,
+        password,
+        confirmPassword,
+        role: role.toLowerCase()
+      });
       addToast({ type: 'success', message: `Account created successfully! Welcome to SmartNest.` });
       const target = getDashboardPath(user.role);
       navigate(target);
     } catch (err) {
-      setErrors({ form: err.message || 'Registration failed. Please try again.' });
+      const errorMessage = err.message || 'Registration failed. Please try again.';
+      setErrors({ form: errorMessage });
+      addToast({ type: 'error', message: errorMessage });
     } finally {
       setSubmitting(false);
     }
@@ -244,7 +254,7 @@ export const RegisterPage = () => {
             <div style={{ position: 'relative' }}>
               <input
                 id="register-password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 className="smartnest-input"
                 placeholder="Minimum 6 characters"
                 value={password}
@@ -254,10 +264,35 @@ export const RegisterPage = () => {
                 }}
                 style={{
                   paddingLeft: '38px',
+                  paddingRight: '40px',
                   borderColor: errors.password ? 'var(--rose)' : 'var(--border)'
                 }}
               />
               <Lock size={16} color="var(--slate)" style={{ position: 'absolute', left: '12px', top: '13px' }} />
+              {password.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--slate)'
+                  }}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              )}
             </div>
             {errors.password && (
               <span style={{ fontSize: '12px', color: 'var(--rose)', marginTop: '4px', display: 'block' }}>
@@ -274,7 +309,7 @@ export const RegisterPage = () => {
             <div style={{ position: 'relative' }}>
               <input
                 id="register-confirm"
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 className="smartnest-input"
                 placeholder="Re-enter password"
                 value={confirmPassword}
@@ -284,10 +319,35 @@ export const RegisterPage = () => {
                 }}
                 style={{
                   paddingLeft: '38px',
+                  paddingRight: '40px',
                   borderColor: errors.confirmPassword ? 'var(--rose)' : 'var(--border)'
                 }}
               />
               <Lock size={16} color="var(--slate)" style={{ position: 'absolute', left: '12px', top: '13px' }} />
+              {confirmPassword.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--slate)'
+                  }}
+                  title={showConfirmPassword ? "Hide password" : "Show password"}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              )}
             </div>
             {errors.confirmPassword && (
               <span style={{ fontSize: '12px', color: 'var(--rose)', marginTop: '4px', display: 'block' }}>

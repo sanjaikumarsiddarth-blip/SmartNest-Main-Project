@@ -3,27 +3,37 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { formatPriceINR } from '../../components/shared/PropertyCard';
 import { ConfirmModal } from '../../components/shared/ConfirmModal';
 import { SkeletonTable } from '../../components/shared/SkeletonCard';
+import { UpgradeModal } from '../../components/subscription/UpgradeModal';
 import {
   PlusCircle,
   Eye,
   Edit,
   Trash2,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Tag,
+  ShieldCheck,
+  ArrowUpRight
 } from 'lucide-react';
 
 export const SellerPropertiesPage = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
+  const { subscription, usage, canCreateProperty } = useSubscription();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('all'); // all | active | pending | sold | rejected
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteModalProperty, setDeleteModalProperty] = useState(null);
+  const [priceModalProperty, setPriceModalProperty] = useState(null);
+  const [newPriceInput, setNewPriceInput] = useState('');
+  const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const fetchProperties = async () => {
     setLoading(true);
@@ -39,6 +49,9 @@ export const SellerPropertiesPage = () => {
 
   useEffect(() => {
     fetchProperties();
+    const handleUpdated = () => fetchProperties();
+    window.addEventListener('smartnest_properties_updated', handleUpdated);
+    return () => window.removeEventListener('smartnest_properties_updated', handleUpdated);
   }, [user]);
 
   const handleDeleteConfirm = async () => {
@@ -54,6 +67,26 @@ export const SellerPropertiesPage = () => {
     }
   };
 
+  const handlePriceUpdateSubmit = async (e) => {
+    e.preventDefault();
+    if (!priceModalProperty || !newPriceInput) return;
+    setUpdatingPrice(true);
+    try {
+      const res = await api.updatePropertyPrice(priceModalProperty.property_id, Number(newPriceInput), user?.user_id);
+      addToast({
+        type: 'success',
+        message: `Price updated to ${formatPriceINR(Number(newPriceInput))}! ${res.notifications?.length || 0} wishlist alerts created.`
+      });
+      setPriceModalProperty(null);
+      setNewPriceInput('');
+      fetchProperties();
+    } catch (err) {
+      addToast({ type: 'error', message: 'Failed to update property price.' });
+    } finally {
+      setUpdatingPrice(false);
+    }
+  };
+
   const filteredProperties = properties.filter((p) => {
     if (activeTab === 'all') return true;
     return p.status === activeTab;
@@ -63,7 +96,7 @@ export const SellerPropertiesPage = () => {
     <div className="page-entrance" style={{ padding: '40px 0 100px 0', backgroundColor: '#F8FAFC', minHeight: '90vh' }}>
       <div className="container-main">
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
           <div>
             <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--ink)' }}>
               My Property Listings
@@ -73,9 +106,107 @@ export const SellerPropertiesPage = () => {
             </p>
           </div>
 
-          <Link to="/seller/add" className="btn btn-primary">
-            <PlusCircle size={16} /> Add Property
-          </Link>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <Link to="/seller/plans" className="btn btn-secondary" style={{ fontSize: '13px' }}>
+              Manage Plan
+            </Link>
+            {canCreateProperty() ? (
+              <Link to="/seller/add" className="btn btn-primary">
+                <PlusCircle size={16} /> Add Property
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowUpgradeModal(true)}
+                className="btn btn-primary"
+                title="Listing limit reached. Upgrade plan to add more."
+              >
+                <PlusCircle size={16} /> Add Property
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Subscription Usage Strip */}
+        <div
+          className="smartnest-card"
+          style={{
+            padding: '16px 20px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+            backgroundColor: 'var(--white)',
+            borderLeft: `4px solid ${usage?.is_limit_reached ? '#F59E0B' : 'var(--teal)'}`
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                backgroundColor: usage?.is_limit_reached ? '#FEF3C7' : '#E6F4F1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <ShieldCheck size={22} color={usage?.is_limit_reached ? '#D97706' : 'var(--teal)'} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--ink)' }}>
+                  {subscription?.plan_name || 'Free Plan'}
+                </span>
+                <span
+                  className="badge-pill"
+                  style={{
+                    fontSize: '11px',
+                    backgroundColor: usage?.is_limit_reached ? '#FEE2E2' : '#E6F4F1',
+                    color: usage?.is_limit_reached ? '#DC2626' : 'var(--teal)'
+                  }}
+                >
+                  {usage?.properties_published || 0} / {usage?.property_limit || 1} Listings Used
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--slate)', marginTop: '2px' }}>
+                {usage?.is_limit_reached
+                  ? 'You have reached your listing quota. Upgrade to unlock more property slots.'
+                  : `${usage?.remaining_slots ?? (usage?.property_limit ? usage.property_limit - (usage.properties_published || 0) : 0)} listing slot${(usage?.property_limit ? usage.property_limit - (usage.properties_published || 0) : 0) === 1 ? '' : 's'} remaining on this plan.`}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '120px', height: '8px', backgroundColor: '#E2E8F0', borderRadius: '4px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  width: `${Math.min(100, (((usage?.properties_published || 0) / (usage?.property_limit || 1)) * 100))}%`,
+                  height: '100%',
+                  backgroundColor: usage?.is_limit_reached ? '#F59E0B' : 'var(--teal)',
+                  borderRadius: '4px',
+                  transition: 'width 0.3s ease'
+                }}
+              />
+            </div>
+            <Link
+              to="/seller/plans"
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--teal)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                textDecoration: 'none'
+              }}
+            >
+              Upgrade Plan <ArrowUpRight size={14} />
+            </Link>
+          </div>
         </div>
 
         {/* Tabs: All | Active | Pending | Sold | Rejected */}
@@ -124,8 +255,12 @@ export const SellerPropertiesPage = () => {
                     <td style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <img
-                          src={p.images?.[0]}
+                          src={p.images?.[0] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80'}
                           alt={p.title}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                          }}
                           style={{ width: '56px', height: '42px', borderRadius: '8px', objectFit: 'cover' }}
                         />
                         <div>
@@ -181,6 +316,18 @@ export const SellerPropertiesPage = () => {
                         >
                           <Sparkles size={13} /> Insights
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPriceModalProperty(p);
+                            setNewPriceInput(String(p.price));
+                          }}
+                          className="btn btn-ghost"
+                          style={{ padding: '6px 10px', fontSize: '12px', border: '1px solid var(--border)', color: 'var(--teal)' }}
+                          title="Update Price & trigger wishlist alerts"
+                        >
+                          <Tag size={13} /> Price
+                        </button>
                         <Link
                           to={`/seller/edit/${p.property_id}`}
                           className="btn btn-ghost"
@@ -216,6 +363,85 @@ export const SellerPropertiesPage = () => {
         )}
       </div>
 
+      {/* Quick Price Update Modal */}
+      {priceModalProperty && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(13, 27, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+        >
+          <div
+            className="smartnest-card"
+            style={{
+              maxWidth: '440px',
+              width: '100%',
+              padding: '28px',
+              backgroundColor: '#FFFFFF',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+            }}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
+              Update Listing Price
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '18px', lineHeight: 1.5 }}>
+              Updating <strong>{priceModalProperty.title}</strong> will record an immutable price history record and trigger automated SNS Wishlist alerts for matched buyers.
+            </p>
+
+            <form onSubmit={handlePriceUpdateSubmit}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--slate)', marginBottom: '6px' }}>
+                  Current Listed Price
+                </label>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>
+                  {formatPriceINR(priceModalProperty.price)}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--slate)', marginBottom: '6px' }}>
+                  New Price (in INR)
+                </label>
+                <input
+                  type="number"
+                  value={newPriceInput}
+                  onChange={(e) => setNewPriceInput(e.target.value)}
+                  placeholder="e.g. 7400000"
+                  className="input-field"
+                  style={{ width: '100%', padding: '10px 12px', fontSize: '14px' }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPriceModalProperty(null)}
+                  className="btn btn-ghost"
+                  disabled={updatingPrice}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={updatingPrice}
+                >
+                  {updatingPrice ? 'Updating & Alerting...' : 'Update & Dispatch Alert'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(deleteModalProperty)}
@@ -225,6 +451,16 @@ export const SellerPropertiesPage = () => {
         isDestructive={true}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteModalProperty(null)}
+      />
+
+      {/* Upgrade Subscription Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        limitType="properties"
+        currentPlan={subscription?.plan_id || 'seller_free'}
+        userRole="seller"
+        usage={usage}
       />
     </div>
   );

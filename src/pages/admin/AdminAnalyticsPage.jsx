@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import { api, DEFAULT_ANALYTICS_PERIOD_DATA, getDemoMode } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import {
   TrendingUp,
@@ -26,14 +26,19 @@ export const AdminAnalyticsPage = () => {
 
   const [period, setPeriod] = useState('30d');
   const [data, setData] = useState(null);
+  const [revenueMetrics, setRevenueMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       setLoading(true);
       try {
-        const res = await api.getAdminAnalytics(period);
+        const [res, rev] = await Promise.all([
+          api.getAdminAnalytics(period),
+          api.getSubscriptionRevenueMetrics()
+        ]);
         setData(res);
+        setRevenueMetrics(rev);
       } catch (err) {
         addToast({ type: 'error', message: 'Failed to fetch platform metrics.' });
       } finally {
@@ -44,6 +49,13 @@ export const AdminAnalyticsPage = () => {
   }, [period, addToast]);
 
   const d = data || {};
+  const periodDefaults = DEFAULT_ANALYTICS_PERIOD_DATA[period] || DEFAULT_ANALYTICS_PERIOD_DATA['30d'];
+  const usersOverTime = (d.users_over_time && d.users_over_time.length > 0) ? d.users_over_time : periodDefaults.users_over_time;
+  const propertiesOverTime = (d.properties_over_time && d.properties_over_time.length > 0) ? d.properties_over_time : periodDefaults.properties_over_time;
+  const searchesPerDay = (d.searches_per_day && d.searches_per_day.length > 0) ? d.searches_per_day : periodDefaults.searches_per_day;
+  const recsGenerated = (d.recommendations_generated && d.recommendations_generated.length > 0) ? d.recommendations_generated : periodDefaults.recommendations_generated;
+  const searchedLocations = (d.most_searched_locations && d.most_searched_locations.length > 0) ? d.most_searched_locations : periodDefaults.most_searched_locations;
+  const isDemo = getDemoMode();
 
   return (
     <div className="page-entrance" style={{ padding: '36px 0 100px 0', backgroundColor: '#F1F5F9', minHeight: '90vh' }}>
@@ -120,6 +132,18 @@ export const AdminAnalyticsPage = () => {
             </div>
             <span style={{ fontSize: '12px', color: 'var(--slate)' }}>High satisfaction index</span>
           </div>
+
+          <div className="smartnest-card" style={{ padding: '20px', borderTop: '3px solid var(--teal)' }}>
+            <span style={{ fontSize: '13px', color: 'var(--slate)', fontWeight: 500 }}>
+              {isDemo ? 'Active Demo Revenue' : 'Active Platform Revenue'}
+            </span>
+            <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--ink)', margin: '6px 0 2px 0' }}>
+              ₹{(revenueMetrics?.total_revenue || 0).toLocaleString('en-IN')}
+            </div>
+            <span style={{ fontSize: '12px', color: 'var(--teal)', fontWeight: 600 }}>
+              {revenueMetrics?.active_subscriptions_count || 0} active subscriptions ({isDemo ? 'Demo' : 'Live'})
+            </span>
+          </div>
         </div>
 
         {/* ── 4 CHARTS GRID (2x2) ─────────────────────────────── */}
@@ -141,7 +165,7 @@ export const AdminAnalyticsPage = () => {
             </p>
             <div style={{ width: '100%', height: '220px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={d.users_over_time || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                <LineChart data={usersOverTime} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
                   <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#64748B' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
@@ -162,7 +186,7 @@ export const AdminAnalyticsPage = () => {
             </p>
             <div style={{ width: '100%', height: '220px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={d.properties_over_time || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                <LineChart data={propertiesOverTime} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
                   <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#64748B' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
@@ -183,7 +207,7 @@ export const AdminAnalyticsPage = () => {
             </p>
             <div style={{ width: '100%', height: '220px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={d.searches_per_day || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                <BarChart data={searchesPerDay} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
                   <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748B' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
@@ -204,7 +228,7 @@ export const AdminAnalyticsPage = () => {
             </p>
             <div style={{ width: '100%', height: '220px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={d.recommendations_generated || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                <LineChart data={recsGenerated} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
@@ -236,7 +260,7 @@ export const AdminAnalyticsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {d.most_searched_locations?.map((loc, idx) => (
+                {searchedLocations.map((loc, idx) => (
                   <tr key={loc.city} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 700, color: 'var(--slate)' }}>
                       #{idx + 1}

@@ -45,6 +45,10 @@ export const PropertyCard = ({
           src={property.images?.[0] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80'}
           alt={property.title}
           loading="lazy"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+          }}
           style={{
             width: '100%',
             height: '100%',
@@ -115,7 +119,7 @@ export const PropertyCard = ({
                   boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
                   transition: 'transform var(--transition-fast)'
                 }}
-                title={isComparing ? "Remove from comparison" : "Add to comparison"}
+                title={isComparing ? "Remove from comparison" : "Add to compare"}
                 aria-label="Toggle comparison"
               >
                 <Scale size={16} />
@@ -165,7 +169,11 @@ export const PropertyCard = ({
             boxShadow: '0 2px 10px rgba(0,0,0,0.12)'
           }}
         >
-          <MatchScoreBadge score={property.match_score} size={48} showLabel={false} />
+          <MatchScoreBadge
+            score={property.match_score}
+            size={48}
+            showLabel={false}
+          />
         </div>
       </div>
 
@@ -177,7 +185,7 @@ export const PropertyCard = ({
             {formatPriceINR(property.price)}
           </span>
           <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--slate)' }}>
-            {property.bhk} BHK · {property.area_sqft} sq.ft
+            {property.bhk} BHK{property.area_sqft ? ` · ${property.area_sqft} sq.ft` : ''}
           </span>
         </div>
 

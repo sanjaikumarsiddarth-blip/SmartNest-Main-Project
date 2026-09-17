@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useSubscription } from '../../context/SubscriptionContext';
+import { UpgradeModal } from '../../components/subscription/UpgradeModal';
 import { formatPriceINR } from '../../components/shared/PropertyCard';
 import {
   Eye,
@@ -9,7 +11,9 @@ import {
   Heart,
   TrendingUp,
   Award,
-  BarChart2
+  BarChart2,
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,11 +30,15 @@ import {
 export const SellerAnalyticsPage = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
+  const { subscription, usage } = useSubscription();
 
   const [period, setPeriod] = useState('30d'); // 7d | 30d | 90d | 1y
   const [analytics, setAnalytics] = useState(null);
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  const isFreePlan = !subscription || subscription?.plan_id === 'free' || subscription?.plan_id === 'seller_free';
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -96,6 +104,47 @@ export const SellerAnalyticsPage = () => {
           </div>
         </div>
 
+        {/* Feature Lock Notice for Free Plan */}
+        {isFreePlan && (
+          <div
+            style={{
+              backgroundColor: '#FEF3C7',
+              border: '1px solid #F59E0B',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              marginBottom: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: '#FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Lock size={20} color="#B45309" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '15px', color: '#92400E' }}>
+                  Advanced Market Analytics Locked (Free Plan)
+                </div>
+                <div style={{ fontSize: '13px', color: '#B45309' }}>
+                  Upgrade to SmartSeller (₹699/mo) or Professional to unlock views-over-time trends, enquiry velocity, and buyer match distributions.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUpgradeModal(true)}
+              className="btn btn-primary"
+              style={{ backgroundColor: '#D97706', borderColor: '#D97706', fontSize: '13px', padding: '8px 18px', whiteSpace: 'nowrap' }}
+            >
+              Upgrade to SmartSeller
+            </button>
+          </div>
+        )}
+
         {/* ── STATS CARDS (4) ─────────────────────────────────── */}
         <div
           style={{
@@ -146,133 +195,200 @@ export const SellerAnalyticsPage = () => {
           </div>
         </div>
 
-        {/* ── CHARTS ROW ──────────────────────────────────────── */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-            gap: '24px',
-            marginBottom: '32px'
-          }}
-        >
-          {/* Chart 1: Views Over Time */}
-          <div className="smartnest-card" style={{ padding: '28px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
-              Views Over Time
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
-              Trend of listing impressions
-            </p>
-            <div style={{ width: '100%', height: '240px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={analytics?.views_over_time || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748B' }} interval={5} />
-                  <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0D1B2A', color: '#FFF', borderRadius: '8px', fontSize: '12px' }} />
-                  <Line type="monotone" dataKey="views" stroke="var(--teal)" strokeWidth={2.5} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Chart 2: Enquiries Over Time */}
-          <div className="smartnest-card" style={{ padding: '28px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
-              Enquiries Over Time
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
-              Weekly volume of buyer contact requests
-            </p>
-            <div style={{ width: '100%', height: '240px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={analytics?.enquiries_over_time || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748B' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0D1B2A', color: '#FFF', borderRadius: '8px', fontSize: '12px' }} />
-                  <Line type="monotone" dataKey="enquiries" stroke="#3D5A73" strokeWidth={2.5} dot={{ r: 4, fill: '#3D5A73' }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        {/* ── MATCH SCORE DISTRIBUTION & BEST PERFORMING CARD ─── */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-            gap: '24px'
-          }}
-        >
-          {/* Chart 3: Match Score Distribution */}
-          <div className="smartnest-card" style={{ padding: '28px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
-              Match Score Distribution
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
-              Number of searching buyers fitting each compatibility tier
-            </p>
-            <div style={{ width: '100%', height: '220px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics?.match_distribution || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
-                  <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#64748B' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0D1B2A', color: '#FFF', borderRadius: '8px', fontSize: '12px' }} />
-                  <Bar dataKey="count" fill="var(--teal)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Best Performing Property Card */}
-          {bestProperty && (
-            <div className="smartnest-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <Award size={20} color="var(--amber)" />
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)' }}>
-                  Best Performing Property
-                </h3>
+        {/* ── CHARTS ROW & ADVANCED INTELLIGENCE (GATED ON FREE PLAN) ────────────────── */}
+        <div style={{ position: 'relative' }}>
+          {isFreePlan && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(248, 250, 252, 0.88)',
+                backdropFilter: 'blur(4px)',
+                zIndex: 10,
+                borderRadius: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 24px',
+                textAlign: 'center'
+              }}
+            >
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FEF3C7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '16px',
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)'
+                }}
+              >
+                <Lock size={26} color="#D97706" />
               </div>
-
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
-                <img
-                  src={bestProperty.images?.[0]}
-                  alt={bestProperty.title}
-                  style={{ width: '100px', height: '70px', borderRadius: '8px', objectFit: 'cover' }}
-                />
-                <div>
-                  <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)' }}>
-                    {bestProperty.title}
-                  </h4>
-                  <div style={{ fontSize: '13px', color: 'var(--slate)' }}>
-                    {formatPriceINR(bestProperty.price)} · {bestProperty.bhk} BHK
-                  </div>
-                  <span className="badge-pill badge-teal" style={{ marginTop: '4px' }}>
-                    {bestProperty.match_score}% Average Match
-                  </span>
-                </div>
-              </div>
-
-              <p style={{ fontSize: '13px', color: 'var(--slate)', lineHeight: 1.5, marginBottom: '16px' }}>
-                Generated <strong>{bestProperty.views || 452} views</strong> and <strong>{bestProperty.enquiries || 12} direct buyer enquiries</strong>. Ranked top in acoustic quietness and educational transit.
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
+                Advanced Market Charts & Buyer Breakdown
+              </h3>
+              <p style={{ fontSize: '14px', color: 'var(--slate)', maxWidth: '480px', lineHeight: 1.5, marginBottom: '24px' }}>
+                Listing impression velocity, buyer inquiry patterns, and match distribution curves are exclusively available on the <strong>SmartSeller (₹699/mo)</strong> and <strong>Professional (₹1,499/mo)</strong> plans.
               </p>
-
-              <div style={{ marginTop: 'auto' }}>
-                <button
-                  type="button"
-                  onClick={() => window.location.href = `/seller/insights/${bestProperty.property_id}`}
-                  className="btn btn-secondary"
-                  style={{ width: '100%' }}
-                >
-                  View Full Intelligence Report
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowUpgradeModal(true)}
+                className="btn btn-primary"
+                style={{ padding: '12px 28px', fontSize: '15px' }}
+              >
+                <Sparkles size={16} /> Upgrade to SmartSeller
+              </button>
             </div>
           )}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+              gap: '24px',
+              marginBottom: '32px',
+              filter: isFreePlan ? 'blur(2px)' : 'none',
+              pointerEvents: isFreePlan ? 'none' : 'auto'
+            }}
+          >
+            {/* Chart 1: Views Over Time */}
+            <div className="smartnest-card" style={{ padding: '28px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
+                Views Over Time
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
+                Trend of listing impressions
+              </p>
+              <div style={{ width: '100%', height: '240px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics?.views_over_time || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748B' }} interval={5} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0D1B2A', color: '#FFF', borderRadius: '8px', fontSize: '12px' }} />
+                    <Line type="monotone" dataKey="views" stroke="var(--teal)" strokeWidth={2.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart 2: Enquiries Over Time */}
+            <div className="smartnest-card" style={{ padding: '28px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
+                Enquiries Over Time
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
+                Weekly volume of buyer contact requests
+              </p>
+              <div style={{ width: '100%', height: '240px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics?.enquiries_over_time || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748B' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0D1B2A', color: '#FFF', borderRadius: '8px', fontSize: '12px' }} />
+                    <Line type="monotone" dataKey="enquiries" stroke="#3D5A73" strokeWidth={2.5} dot={{ r: 4, fill: '#3D5A73' }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* ── MATCH SCORE DISTRIBUTION & BEST PERFORMING CARD ─── */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+              gap: '24px',
+              filter: isFreePlan ? 'blur(2px)' : 'none',
+              pointerEvents: isFreePlan ? 'none' : 'auto'
+            }}
+          >
+            {/* Chart 3: Match Score Distribution */}
+            <div className="smartnest-card" style={{ padding: '28px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '4px' }}>
+                Match Score Distribution
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
+                Number of searching buyers fitting each compatibility tier
+              </p>
+              <div style={{ width: '100%', height: '220px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analytics?.match_distribution || []} margin={{ top: 10, right: 10, bottom: 0, left: -25 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EDF2F7" />
+                    <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0D1B2A', color: '#FFF', borderRadius: '8px', fontSize: '12px' }} />
+                    <Bar dataKey="count" fill="var(--teal)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Best Performing Property Card */}
+            {bestProperty && (
+              <div className="smartnest-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <Award size={20} color="var(--amber)" />
+                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)' }}>
+                    Best Performing Property
+                  </h3>
+                </div>
+
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+                  <img
+                    src={bestProperty.images?.[0]}
+                    alt={bestProperty.title}
+                    style={{ width: '100px', height: '70px', borderRadius: '8px', objectFit: 'cover' }}
+                  />
+                  <div>
+                    <h4 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)' }}>
+                      {bestProperty.title}
+                    </h4>
+                    <div style={{ fontSize: '13px', color: 'var(--slate)' }}>
+                      {formatPriceINR(bestProperty.price)} · {bestProperty.bhk} BHK
+                    </div>
+                    <span className="badge-pill badge-teal" style={{ marginTop: '4px' }}>
+                      {bestProperty.match_score}% Average Match
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: '13px', color: 'var(--slate)', lineHeight: 1.5, marginBottom: '16px' }}>
+                  Generated <strong>{bestProperty.views || 452} views</strong> and <strong>{bestProperty.enquiries || 12} direct buyer enquiries</strong>. Ranked top in acoustic quietness and educational transit.
+                </p>
+
+                <div style={{ marginTop: 'auto' }}>
+                  <button
+                    type="button"
+                    onClick={() => window.location.href = `/seller/insights/${bestProperty.property_id}`}
+                    className="btn btn-secondary"
+                    style={{ width: '100%' }}
+                  >
+                    View Full Intelligence Report
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          limitType="analytics"
+          currentPlan={subscription?.plan_id || 'seller_free'}
+          userRole="seller"
+          usage={usage}
+        />
       </div>
     </div>
   );

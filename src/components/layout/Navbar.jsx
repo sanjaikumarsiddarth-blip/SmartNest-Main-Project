@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useCompare } from '../../context/CompareContext';
 import {
   Home,
   Compass,
@@ -17,17 +18,57 @@ import {
   LogOut,
   Menu,
   X,
-  UserCheck
+  UserCheck,
+  Bell,
+  MessageSquare,
+  CreditCard
 } from 'lucide-react';
+import { api } from '../../services/api';
+import { useMessaging } from '../../context/MessagingContext';
+import { SmartNestBrand } from '../shared/SmartNestBrand';
 
 export const Navbar = () => {
   const { user, logout, demoMode, toggleDemoMode, switchPersona, getDashboardPath } = useAuth();
+  const { compareCount } = useCompare();
+  const { unreadCount: messagingUnreadCount } = useMessaging();
   const location = useLocation();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [demoDropdownOpen, setDemoDropdownOpen] = useState(false);
   const [activePublicNav, setActivePublicNav] = useState('');
+  const [notifications, setNotifications] = useState([]);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const loadNotifs = async () => {
+      try {
+        const notifs = await api.getNotifications(user?.user_id || 'usr_buyer_01');
+        setNotifications(notifs || []);
+      } catch (e) {
+        console.error('Failed to load notifications', e);
+      }
+    };
+    loadNotifs();
+
+    const handleNotifUpdate = () => {
+      loadNotifs();
+    };
+    window.addEventListener('smartnest_notifications_updated', handleNotifUpdate);
+    return () => window.removeEventListener('smartnest_notifications_updated', handleNotifUpdate);
+  }, [user]);
+
+  const handleMarkSingleRead = async (id) => {
+    await api.markNotificationRead(id);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
+
+  const handleMarkAllRead = async () => {
+    await api.markAllNotificationsRead(user?.user_id || 'usr_buyer_01');
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -255,7 +296,7 @@ export const Navbar = () => {
             height: '72px'
           }}
         >
-          {/* Logo with Teal Dot on S icon */}
+          {/* Official SmartNest Brand with Teal Dot & Find-Match-Move Tagline */}
           <Link
             to={user ? getDashboardPath(user.role) : "/"}
             onClick={() => setActivePublicNav('')}
@@ -263,40 +304,19 @@ export const Navbar = () => {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
               textDecoration: 'none',
-              color: 'var(--ink)'
+              color: 'var(--ink)',
+              flexShrink: 0,
+              marginRight: '32px'
             }}
           >
-            <div
-              className="brand-logo-icon"
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '10px',
-                backgroundColor: 'var(--ink)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                position: 'relative'
-              }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                {/* Home shape */}
-                <path d="M3 9.5L12 3L21 9.5V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V9.5Z" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                {/* Teal Accent Dot */}
-                <circle cx="12" cy="14" r="2.5" fill="var(--teal)" />
-              </svg>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
-                SmartNest <span style={{ color: 'var(--teal)' }}>AI</span>
-              </span>
-              <span style={{ fontSize: '10px', color: 'var(--slate)', fontWeight: 500, lineHeight: 1 }}>
-                PropTech Intelligence
-              </span>
-            </div>
+            <SmartNestBrand
+              orientation="horizontal"
+              withTagline={true}
+              iconSize={38}
+              textSize="19px"
+              taglineSize="10px"
+            />
           </Link>
 
           {/* Nav Links based on Role & Context */}
@@ -304,7 +324,7 @@ export const Navbar = () => {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '12px'
+              gap: '6px'
             }}
             className="desktop-nav"
           >
@@ -325,13 +345,6 @@ export const Navbar = () => {
                 >
                   How It Works
                 </a>
-                <Link
-                  to="/register"
-                  onClick={() => setActivePublicNav('sellers')}
-                  className={`nav-link-interactive ${activePublicNav === 'sellers' ? 'active' : ''}`}
-                >
-                  For Sellers
-                </Link>
                 <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--border)', margin: '0 4px' }} />
                 <Link
                   to="/login"
@@ -371,19 +384,61 @@ export const Navbar = () => {
                   to="/buyer/quiz"
                   className={`nav-link-interactive ${location.pathname === '/buyer/quiz' ? 'active' : ''}`}
                 >
-                  <Sparkles size={16} /> Lifestyle Quiz
+                  <Sparkles size={16} /> User Needs
                 </Link>
                 <Link
                   to="/buyer/compare"
                   className={`nav-link-interactive ${location.pathname === '/buyer/compare' ? 'active' : ''}`}
                 >
                   <Scale size={16} /> Compare
+                  {compareCount > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: 'var(--teal)',
+                        color: '#FFFFFF',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        marginLeft: '3px'
+                      }}
+                    >
+                      {compareCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   to="/buyer/shortlist"
                   className={`nav-link-interactive ${location.pathname === '/buyer/shortlist' ? 'active' : ''}`}
                 >
                   <Heart size={16} /> Saved
+                </Link>
+                <Link
+                  to="/buyer/messages"
+                  className={`nav-link-interactive ${location.pathname.startsWith('/buyer/messages') ? 'active' : ''}`}
+                >
+                  <MessageSquare size={16} /> Message Box
+                  {messagingUnreadCount > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: 'var(--teal)',
+                        color: '#FFFFFF',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '10px',
+                        marginLeft: '3px'
+                      }}
+                    >
+                      {messagingUnreadCount}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  to="/buyer/plans"
+                  className={`nav-link-interactive ${location.pathname === '/buyer/plans' ? 'active' : ''}`}
+                >
+                  <CreditCard size={16} /> Plans
                 </Link>
               </>
             )}
@@ -395,7 +450,7 @@ export const Navbar = () => {
                   to="/seller/dashboard"
                   className={`nav-link-interactive ${location.pathname === '/seller/dashboard' ? 'active' : ''}`}
                 >
-                  <BarChart3 size={16} /> Dashboard
+                  <Home size={16} /> Home
                 </Link>
                 <Link
                   to="/seller/properties"
@@ -421,6 +476,12 @@ export const Navbar = () => {
                 >
                   <Mail size={16} /> Enquiries
                 </Link>
+                <Link
+                  to="/seller/plans"
+                  className={`nav-link-interactive ${location.pathname === '/seller/plans' ? 'active' : ''}`}
+                >
+                  <CreditCard size={16} /> Plans
+                </Link>
               </>
             )}
 
@@ -431,7 +492,7 @@ export const Navbar = () => {
                   to="/admin/dashboard"
                   className={`nav-link-interactive ${location.pathname === '/admin/dashboard' ? 'active' : ''}`}
                 >
-                  <ShieldCheck size={16} /> Ops Home
+                  <ShieldCheck size={16} /> Home
                 </Link>
                 <Link
                   to="/admin/users"
@@ -471,24 +532,198 @@ export const Navbar = () => {
                 </Link>
               </>
             )}
+          </nav>
 
-            {/* Logged in User Profile & Logout */}
-            {user && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '12px' }}>
+          {/* Logged in User Profile & Notifications & Logout */}
+          {user && (
+            <div className="desktop-nav-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto' }}>
+                {/* Notification Bell Dropdown */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setNotifDropdownOpen((prev) => !prev)}
+                    className="btn btn-ghost"
+                    style={{
+                      position: 'relative',
+                      padding: '8px',
+                      borderRadius: '50%',
+                      color: 'var(--ink)',
+                      backgroundColor: notifDropdownOpen ? 'var(--mist)' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title="Notifications & Wishlist Price Alerts"
+                    aria-label="Notifications"
+                  >
+                    <Bell size={18} color={unreadCount > 0 ? 'var(--teal)' : 'var(--slate)'} />
+                    {unreadCount > 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: '2px',
+                          right: '2px',
+                          backgroundColor: 'var(--rose)',
+                          color: '#FFFFFF',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          borderRadius: '999px',
+                          padding: '1px 5px',
+                          lineHeight: 1.2
+                        }}
+                      >
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {notifDropdownOpen && (
+                    <div
+                      className="smartnest-card"
+                      style={{
+                        position: 'absolute',
+                        top: '44px',
+                        right: 0,
+                        width: '340px',
+                        maxHeight: '420px',
+                        overflowY: 'auto',
+                        padding: '16px',
+                        boxShadow: '0 12px 30px rgba(0, 0, 0, 0.15)',
+                        zIndex: 1100,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '8px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Bell size={14} color="var(--teal)" /> Notifications & Alerts
+                        </span>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllRead}
+                            style={{ background: 'none', border: 'none', color: 'var(--teal)', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+
+                      {notifications.length === 0 ? (
+                        <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--slate)', fontSize: '12px' }}>
+                          No alerts yet. Save properties to your shortlist or message sellers to receive notifications!
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {notifications.map((notif) => (
+                            <div
+                              key={notif.id}
+                              style={{
+                                padding: '12px',
+                                borderRadius: 'var(--radius-md)',
+                                backgroundColor: notif.read ? 'var(--mist)' : 'var(--teal-light)',
+                                border: `1px solid ${notif.read ? 'var(--border)' : 'rgba(42, 157, 143, 0.3)'}`,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span
+                                  className={`badge-pill ${notif.type === 'new_message' ? 'badge-teal' : 'badge-rose'}`}
+                                  style={{ fontSize: '9px', fontWeight: 700 }}
+                                >
+                                  {notif.title || (notif.type === 'new_message' ? 'NEW MESSAGE' : 'PRICE DROP ALERT')}
+                                </span>
+                                {!notif.read && (
+                                  <button
+                                    onClick={() => handleMarkSingleRead(notif.id)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--slate)', fontSize: '11px', cursor: 'pointer' }}
+                                  >
+                                    Dismiss
+                                  </button>
+                                )}
+                              </div>
+
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>
+                                {notif.message}
+                              </div>
+
+                              {notif.metadata?.old_price && notif.metadata?.new_price && (
+                                <div style={{ fontSize: '12px', color: 'var(--slate)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ textDecoration: 'line-through', color: '#94A3B8' }}>
+                                    ₹{Math.round(notif.metadata.old_price / 100000)}L
+                                  </span>
+                                  <span>→</span>
+                                  <span style={{ fontWeight: 700, color: 'var(--teal)' }}>
+                                    ₹{Math.round(notif.metadata.new_price / 100000)}L
+                                  </span>
+                                </div>
+                              )}
+
+                              {notif.link ? (
+                                <div style={{ marginTop: '4px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setNotifDropdownOpen(false);
+                                      handleMarkSingleRead(notif.id);
+                                      navigate(notif.link);
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ fontSize: '11px', padding: '4px 10px', width: 'auto' }}
+                                  >
+                                    View
+                                  </button>
+                                </div>
+                              ) : notif.property_id ? (
+                                <div style={{ marginTop: '4px' }}>
+                                  <button
+                                    onClick={() => {
+                                      setNotifDropdownOpen(false);
+                                      handleMarkSingleRead(notif.id);
+                                      navigate(`/buyer/property/${notif.property_id}`);
+                                    }}
+                                    className="btn btn-primary"
+                                    style={{ fontSize: '11px', padding: '4px 10px', width: 'auto' }}
+                                  >
+                                    View Property
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* User Pill */}
                 <div
+                  onClick={user.role === 'seller' ? () => navigate('/seller/profile') : undefined}
+                  role={user.role === 'seller' ? 'button' : undefined}
+                  tabIndex={user.role === 'seller' ? 0 : undefined}
+                  onKeyDown={user.role === 'seller' ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/seller/profile'); } } : undefined}
+                  title={user.role === 'seller' ? 'View Seller Profile' : undefined}
+                  aria-label={user.role === 'seller' ? 'View Seller Profile' : undefined}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
                     padding: '6px 12px',
                     borderRadius: 'var(--radius-pill)',
-                    backgroundColor: 'var(--mist)',
+                    backgroundColor: location.pathname === '/seller/profile' ? 'var(--teal-light)' : 'var(--mist)',
+                    border: location.pathname === '/seller/profile' ? '1px solid var(--teal)' : '1px solid transparent',
                     fontSize: '13px',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    cursor: user.role === 'seller' ? 'pointer' : 'default',
+                    transition: 'all var(--transition-fast)'
                   }}
                 >
                   <UserCheck size={14} color="var(--teal)" />
-                  <span>{user.name}</span>
+                  <span style={{ fontWeight: location.pathname === '/seller/profile' ? 700 : 500, color: location.pathname === '/seller/profile' ? 'var(--teal)' : 'inherit' }}>
+                    {user.name}
+                  </span>
                   <span
                     className={`badge-pill ${
                       user.role === 'admin'
@@ -514,7 +749,6 @@ export const Navbar = () => {
                 </button>
               </div>
             )}
-          </nav>
 
           {/* Mobile Hamburger Button */}
           <button
@@ -571,17 +805,6 @@ export const Navbar = () => {
                   How It Works
                 </a>
                 <Link
-                  to="/register"
-                  onClick={() => {
-                    setActivePublicNav('sellers');
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`btn ${activePublicNav === 'sellers' ? 'btn-primary' : 'btn-ghost'}`}
-                  style={{ justifyContent: 'flex-start' }}
-                >
-                  For Sellers
-                </Link>
-                <Link
                   to="/login"
                   onClick={() => {
                     setActivePublicNav('login');
@@ -608,9 +831,11 @@ export const Navbar = () => {
               <>
                 <Link to="/buyer/dashboard" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Home size={16} /> Home</Link>
                 <Link to="/buyer/recommendations" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Compass size={16} /> Matches</Link>
-                <Link to="/buyer/quiz" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Sparkles size={16} /> Lifestyle Quiz</Link>
-                <Link to="/buyer/compare" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Scale size={16} /> Compare</Link>
+                <Link to="/buyer/quiz" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Sparkles size={16} /> User Needs</Link>
+                <Link to="/buyer/compare" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Scale size={16} /> Compare {compareCount > 0 && `(${compareCount})`}</Link>
                 <Link to="/buyer/shortlist" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><Heart size={16} /> Saved</Link>
+                <Link to="/buyer/messages" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><MessageSquare size={16} /> Message Box {messagingUnreadCount > 0 && `(${messagingUnreadCount})`}</Link>
+                <Link to="/buyer/plans" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><CreditCard size={16} /> Plans</Link>
                 <button onClick={handleLogout} className="btn btn-destructive" style={{ marginTop: '8px' }}>Log Out</button>
               </>
             )}
@@ -618,23 +843,25 @@ export const Navbar = () => {
             {isSeller && (
               <>
                 <Link to="/seller/dashboard" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Dashboard</Link>
+                <Link to="/seller/profile" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Seller Profile</Link>
                 <Link to="/seller/properties" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>My Listings</Link>
                 <Link to="/seller/add" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Add Property</Link>
                 <Link to="/seller/analytics" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Analytics</Link>
                 <Link to="/seller/enquiries" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Enquiries</Link>
+                <Link to="/seller/plans" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}><CreditCard size={16} /> Plans</Link>
                 <button onClick={handleLogout} className="btn btn-destructive" style={{ marginTop: '8px' }}>Log Out</button>
               </>
             )}
 
             {isAdmin && (
               <>
-                <Link to="/admin/dashboard" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Dashboard</Link>
-                <Link to="/admin/users" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Users</Link>
-                <Link to="/admin/sellers" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Sellers</Link>
-                <Link to="/admin/properties" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Properties</Link>
-                <Link to="/admin/reports" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Reports</Link>
+                <Link to="/admin/dashboard" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Admin Console</Link>
+                <Link to="/admin/users" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Manage Users</Link>
+                <Link to="/admin/sellers" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Manage Sellers</Link>
+                <Link to="/admin/properties" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Manage Listings</Link>
+                <Link to="/admin/reports" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Fraud Reports</Link>
                 <Link to="/admin/analytics" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Analytics</Link>
-                <Link to="/admin/settings" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Settings</Link>
+                <Link to="/admin/settings" className="btn btn-ghost" style={{ justifyContent: 'flex-start' }}>Engine Settings</Link>
                 <button onClick={handleLogout} className="btn btn-destructive" style={{ marginTop: '8px' }}>Log Out</button>
               </>
             )}
@@ -656,7 +883,7 @@ export const Navbar = () => {
             display: 'none',
             justifyContent: 'space-around',
             padding: '10px 0',
-            zIndex: 900,
+            zIndex: 9990,
             boxShadow: '0 -2px 10px rgba(0,0,0,0.05)'
           }}
         >
@@ -697,10 +924,35 @@ export const Navbar = () => {
               color: location.pathname === '/buyer/compare' ? 'var(--teal)' : 'var(--slate)',
               textDecoration: 'none',
               fontSize: '11px',
-              gap: '4px'
+              gap: '4px',
+              position: 'relative'
             }}
           >
-            <Scale size={18} /> Compare
+            <div style={{ position: 'relative' }}>
+              <Scale size={18} />
+              {compareCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-8px',
+                    backgroundColor: 'var(--teal)',
+                    color: '#FFFFFF',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    width: '14px',
+                    height: '14px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {compareCount}
+                </span>
+              )}
+            </div>
+            Compare
           </Link>
           <Link
             to="/buyer/shortlist"
@@ -715,6 +967,45 @@ export const Navbar = () => {
             }}
           >
             <Heart size={18} /> Shortlist
+          </Link>
+          <Link
+            to="/buyer/messages"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              color: location.pathname.startsWith('/buyer/messages') ? 'var(--teal)' : 'var(--slate)',
+              textDecoration: 'none',
+              fontSize: '11px',
+              gap: '4px',
+              position: 'relative'
+            }}
+          >
+            <div style={{ position: 'relative' }}>
+              <MessageSquare size={18} />
+              {messagingUnreadCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-8px',
+                    backgroundColor: 'var(--teal)',
+                    color: '#FFFFFF',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    width: '14px',
+                    height: '14px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {messagingUnreadCount}
+                </span>
+              )}
+            </div>
+            Messages
           </Link>
         </div>
       )}

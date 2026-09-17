@@ -1,13 +1,17 @@
 import React from 'react';
 
-export const MatchScoreBadge = ({ score = 90, size = 64, showLabel = true }) => {
+export const MatchScoreBadge = ({
+  score = 90,
+  size = 64,
+  showLabel = true
+}) => {
   // Score Tiers:
   // 95–100: "Excellent Match", teal fill
   // 85–94:  "Great Match", blue-teal fill
   // 70–84:  "Good Match", amber fill
   // <70:    "Partial Match", slate fill
 
-  let strokeColor = 'var(--teal)';
+  let strokeColor = '#2A9D8F';
   let labelText = 'Great Match';
   let badgeClass = 'badge-teal';
 
@@ -84,6 +88,11 @@ export const MatchScoreBadge = ({ score = 90, size = 64, showLabel = true }) => 
           >
             {score}%
           </span>
+          {size >= 100 && (
+            <span style={{ fontSize: '11px', color: 'var(--slate)', fontWeight: 600, marginTop: '2px' }}>
+              Match
+            </span>
+          )}
         </div>
       </div>
 
@@ -93,7 +102,8 @@ export const MatchScoreBadge = ({ score = 90, size = 64, showLabel = true }) => 
           style={{
             fontSize: size >= 100 ? '13px' : '11px',
             padding: '2px 8px',
-            textAlign: 'center'
+            textAlign: 'center',
+            fontWeight: 600
           }}
         >
           {labelText}

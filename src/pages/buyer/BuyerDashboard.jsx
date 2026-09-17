@@ -3,9 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useCompare } from '../../context/CompareContext';
 import { PropertyCard } from '../../components/shared/PropertyCard';
 import { SkeletonCard } from '../../components/shared/SkeletonCard';
 import { EmptyState } from '../../components/shared/EmptyState';
+import { useSubscription } from '../../context/SubscriptionContext';
 import {
   Sparkles,
   ArrowRight,
@@ -14,11 +16,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
-  Sliders
+  Sliders,
+  CreditCard
 } from 'lucide-react';
 
 export const BuyerDashboard = () => {
   const { user, sessionId } = useAuth();
+  const { subscription, usage } = useSubscription();
   const { addToast } = useToast();
   const navigate = useNavigate();
 
@@ -27,8 +31,13 @@ export const BuyerDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [recentSearches, setRecentSearches] = useState([]);
   const [shortlistIds, setShortlistIds] = useState([]);
-  const [compareIds, setCompareIds] = useState([]);
   const [aiSearchInput, setAiSearchInput] = useState('');
+  const {
+    selectedPropertyIds,
+    toggleCompare,
+    isInCompare,
+    clearCompare
+  } = useCompare();
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -69,20 +78,6 @@ export const BuyerDashboard = () => {
     }
   };
 
-  const handleCompareToggle = (propId) => {
-    if (compareIds.includes(propId)) {
-      setCompareIds((prev) => prev.filter((id) => id !== propId));
-      addToast({ type: 'info', message: 'Removed from comparison.' });
-    } else {
-      if (compareIds.length >= 3) {
-        addToast({ type: 'warning', message: 'You can compare up to 3 properties.' });
-        return;
-      }
-      setCompareIds((prev) => [...prev, propId]);
-      addToast({ type: 'success', message: 'Added to comparison bar.' });
-    }
-  };
-
   const handleAiSearchSubmit = (e) => {
     e.preventDefault();
     if (!aiSearchInput.trim()) return;
@@ -97,7 +92,7 @@ export const BuyerDashboard = () => {
     <div className="page-entrance" style={{ padding: '40px 0 80px 0' }}>
       <div className="container-main">
         {/* Top Greeting Header (DM Serif 32px) */}
-        <div style={{ marginBottom: '32px' }}>
+        <div style={{ marginBottom: '24px' }}>
           <h1
             className="font-display"
             style={{ fontSize: '32px', color: 'var(--ink)', marginBottom: '6px' }}
@@ -107,6 +102,82 @@ export const BuyerDashboard = () => {
           <p style={{ fontSize: '15px', color: 'var(--slate)' }}>
             Here are properties tailored to your commute limits, family schools, and acoustic tranquility.
           </p>
+        </div>
+
+        {/* Active Subscription Status & Change Plan Widget */}
+        <div
+          className="smartnest-card"
+          style={{
+            padding: '18px 24px',
+            marginBottom: '32px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                backgroundColor: 'var(--teal-light)',
+                color: 'var(--teal)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <CreditCard size={20} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Buyer Subscription
+                </span>
+                <span className="badge-pill badge-teal" style={{ textTransform: 'capitalize', fontSize: '11px', padding: '1px 7px' }}>
+                  {subscription?.status || 'Active'}
+                </span>
+              </div>
+              <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--ink)' }}>
+                {subscription?.plan_name || 'Free'} · {subscription?.billing_period_text || (subscription?.amount === 0 ? '₹0 / month' : `₹${subscription?.amount?.toLocaleString()} / month`)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: '160px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>
+                <span style={{ color: 'var(--slate)' }}>Seller Contacts</span>
+                <span style={{ color: (usage?.contacts_used || 0) >= (usage?.contact_limit || 1) ? 'var(--rose)' : 'var(--teal)' }}>
+                  {usage?.contacts_used || 0} / {usage?.contact_limit || 1} Used
+                </span>
+              </div>
+              <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${Math.min(100, Math.round(((usage?.contacts_used || 0) / (usage?.contact_limit || 1)) * 100))}%`,
+                    backgroundColor: (usage?.contacts_used || 0) >= (usage?.contact_limit || 1) ? 'var(--rose)' : 'var(--teal)',
+                    transition: 'width 300ms ease'
+                  }}
+                />
+              </div>
+            </div>
+
+            <Link
+              to="/buyer/plans"
+              className="btn btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '8px 16px' }}
+            >
+              <CreditCard size={14} /> Change Plan
+            </Link>
+          </div>
         </div>
 
         {/* Quiz Onboarding Banner or Profile Summary Card */}
@@ -241,9 +312,9 @@ export const BuyerDashboard = () => {
                   property={property}
                   showCompare={true}
                   showSave={true}
-                  isComparing={compareIds.includes(property.property_id)}
+                  isComparing={isInCompare(property.property_id)}
                   isSaved={shortlistIds.includes(property.property_id)}
-                  onCompare={handleCompareToggle}
+                  onCompare={() => toggleCompare(property)}
                   onSave={handleSaveToggle}
                 />
               ))}
@@ -314,7 +385,7 @@ export const BuyerDashboard = () => {
               type="text"
               className="smartnest-input"
               style={{ flex: 1, minWidth: '260px' }}
-              placeholder="Describe your ideal home... (e.g. A quiet 2BHK near Tidel Park under ₹60L)"
+              placeholder="Type your requirements"
               value={aiSearchInput}
               onChange={(e) => setAiSearchInput(e.target.value)}
             />
@@ -326,7 +397,7 @@ export const BuyerDashboard = () => {
       </div>
 
       {/* Sticky Bottom Compare Bar if properties selected */}
-      {compareIds.length > 0 && (
+      {selectedPropertyIds.length > 0 && (
         <div
           style={{
             position: 'fixed',
@@ -346,17 +417,17 @@ export const BuyerDashboard = () => {
           }}
         >
           <span style={{ fontSize: '14px', fontWeight: 500 }}>
-            {compareIds.length} of 3 properties selected
+            {selectedPropertyIds.length} of 3 properties selected
           </span>
           <button
-            onClick={() => navigate(`/buyer/compare?ids=${compareIds.join(',')}`)}
+            onClick={() => navigate(`/buyer/compare?ids=${selectedPropertyIds.join(',')}`)}
             className="btn btn-primary"
             style={{ padding: '6px 16px', fontSize: '13px' }}
           >
             Compare Now
           </button>
           <button
-            onClick={() => setCompareIds([])}
+            onClick={clearCompare}
             style={{ background: 'none', border: 'none', color: '#94A3B8', fontSize: '12px', cursor: 'pointer' }}
           >
             Clear

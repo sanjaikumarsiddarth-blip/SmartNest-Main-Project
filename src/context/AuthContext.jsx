@@ -51,14 +51,21 @@ export const AuthProvider = ({ children }) => {
     setDemoModeState(enabled);
   };
 
-  const login = async (email, password) => {
-    const authData = await api.login(email, password);
+  const login = async (email, password, contact = '') => {
+    const currentSessionId =
+      sessionId ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('smartnest_session_id') : '') ||
+      generateUUID();
+
+    const authData = await api.loginUser(email, password, contact);
     const userData = {
       user_id: authData.user_id,
       name: authData.name,
       role: authData.role,
       email: authData.email,
-      session_id: sessionId,
+      phone: authData.phone || contact,
+      contact: authData.contact || authData.phone || contact,
+      session_id: currentSessionId,
       token: authData.token
     };
     setUser(userData);
@@ -67,14 +74,35 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
-  const register = async (name, email, password, role) => {
-    const authData = await api.register(name, email, password, role);
+  const register = async (nameOrPayload, email, password, role, confirmPassword) => {
+    let payload;
+    if (typeof nameOrPayload === 'object' && nameOrPayload !== null) {
+      payload = { ...nameOrPayload };
+    } else {
+      payload = {
+        name: nameOrPayload,
+        email,
+        password,
+        role,
+        confirmPassword
+      };
+    }
+
+    const currentSessionId =
+      sessionId ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('smartnest_session_id') : '') ||
+      generateUUID();
+
+    payload.session_id = currentSessionId;
+
+    const authData = await api.registerUser(payload);
+
     const userData = {
       user_id: authData.user_id,
       name: authData.name,
       role: authData.role,
       email: authData.email,
-      session_id: sessionId,
+      session_id: currentSessionId,
       token: authData.token
     };
     setUser(userData);
@@ -155,7 +183,9 @@ export const AuthProvider = ({ children }) => {
         toggleDemoMode,
         loading,
         login,
+        loginUser: login,
         register,
+        registerUser: register,
         logout,
         switchPersona,
         getDashboardPath

@@ -38,7 +38,7 @@ export const Footer = () => {
                 <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--teal)' }} />
               </div>
               <span style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF' }}>
-                SmartNest <span style={{ color: 'var(--teal)' }}>AI</span>
+                SmartNest
               </span>
             </div>
             <p style={{ fontSize: '14px', color: '#94A3B8', lineHeight: 1.6, maxWidth: '280px' }}>

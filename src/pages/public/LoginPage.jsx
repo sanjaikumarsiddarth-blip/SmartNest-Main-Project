@@ -1,22 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { LogIn, Lock, Mail, UserCheck } from 'lucide-react';
+import { Lock, Mail, Phone, UserCheck, Eye, EyeOff } from 'lucide-react';
+import { SmartNestBrand } from '../../components/shared/SmartNestBrand';
 
-export const LoginPage = () => {
+export const LoginPage = ({ initialRole = null }) => {
   const { login, getDashboardPath } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const queryRole = new URLSearchParams(location.search).get('role');
+  const [activeRole, setActiveRole] = useState(
+    initialRole || queryRole || (location.pathname.includes('seller') ? 'seller' : 'buyer')
+  );
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [contact, setContact] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   const from = location.state?.from?.pathname;
+
+  // Sync role if props change
+  useEffect(() => {
+    if (initialRole) {
+      setActiveRole(initialRole);
+    } else if (location.pathname.includes('seller')) {
+      setActiveRole('seller');
+    }
+  }, [initialRole, location.pathname]);
 
   const validate = () => {
     const errs = {};
@@ -28,6 +45,14 @@ export const LoginPage = () => {
     if (!password) {
       errs.password = 'Password is required';
     }
+
+    if (activeRole === 'seller' && contact.trim()) {
+      const cleaned = contact.replace(/[\s\-()+]/g, '');
+      if (cleaned.length < 7 || cleaned.length > 15 || !/^\d+$/.test(cleaned)) {
+        errs.contact = 'Please enter a valid contact number';
+      }
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -39,12 +64,14 @@ export const LoginPage = () => {
     setSubmitting(true);
     setErrors({});
     try {
-      const user = await login(email, password);
+      const user = await login(email, password, contact);
       addToast({ type: 'success', message: `Welcome back, ${user.name}!` });
       const target = from || getDashboardPath(user.role);
       navigate(target);
     } catch (err) {
-      setErrors({ form: err.message || 'Login failed. Please check your credentials.' });
+      const errorMsg = err.message || 'Login failed. Please check your credentials.';
+      setErrors({ form: errorMsg });
+      addToast({ type: 'error', message: errorMsg });
     } finally {
       setSubmitting(false);
     }
@@ -52,15 +79,19 @@ export const LoginPage = () => {
 
   // Demo credential autofill helper
   const fillCredentials = (type) => {
+    setActiveRole(type);
     if (type === 'buyer') {
       setEmail('aarav@smartnest.ai');
       setPassword('password123');
+      setContact('');
     } else if (type === 'seller') {
       setEmail('prestige@smartnest.ai');
       setPassword('password123');
+      setContact('+91 90000 00000');
     } else if (type === 'admin') {
       setEmail('admin@smartnest.ai');
       setPassword('adminpassword');
+      setContact('');
     }
     setErrors({});
   };
@@ -80,32 +111,115 @@ export const LoginPage = () => {
         className="smartnest-card"
         style={{
           width: '100%',
-          maxWidth: '440px',
+          maxWidth: '460px',
           padding: '36px 32px'
         }}
       >
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <div
-            style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '12px',
-              backgroundColor: 'var(--teal-light)',
-              color: 'var(--teal)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '12px'
-            }}
-          >
-            <LogIn size={24} />
-          </div>
-          <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--ink)' }}>
-            Sign in to SmartNest
+        {/* Official SmartNest Branding with Find-Match-Move Tagline */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
+          <SmartNestBrand
+            orientation="horizontal"
+            withTagline={true}
+            iconSize={42}
+            textSize="24px"
+            taglineSize="11.5px"
+          />
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)', marginTop: '14px' }}>
+            {activeRole === 'seller' ? 'Sign in to Seller Portal' : activeRole === 'admin' ? 'Sign in to Admin Console' : 'Sign in to SmartNest'}
           </h2>
-          <p style={{ fontSize: '14px', color: 'var(--slate)', marginTop: '4px' }}>
+          <p style={{ fontSize: '13.5px', color: 'var(--slate)', marginTop: '4px' }}>
             Access your personalized PropTech dashboard
           </p>
+        </div>
+
+        {/* Role Selector Tabs (Buyer vs Seller vs Admin) */}
+        <div style={{ marginBottom: '20px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '6px',
+              padding: '4px',
+              backgroundColor: 'var(--mist)',
+              borderRadius: 'var(--radius-md)'
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setActiveRole('buyer');
+                if (email === 'prestige@smartnest.ai' || email === 'admin@smartnest.ai') {
+                  setEmail('aarav@smartnest.ai');
+                  setPassword('password123');
+                  setContact('');
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                fontWeight: activeRole === 'buyer' ? 600 : 500,
+                fontSize: '13px',
+                cursor: 'pointer',
+                backgroundColor: activeRole === 'buyer' ? 'var(--white)' : 'transparent',
+                color: activeRole === 'buyer' ? 'var(--teal)' : 'var(--slate)',
+                boxShadow: activeRole === 'buyer' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              Buyer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveRole('seller');
+                if (email === 'aarav@smartnest.ai' || email === 'admin@smartnest.ai') {
+                  setEmail('prestige@smartnest.ai');
+                  setPassword('password123');
+                  setContact('+91 90000 00000');
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                fontWeight: activeRole === 'seller' ? 600 : 500,
+                fontSize: '13px',
+                cursor: 'pointer',
+                backgroundColor: activeRole === 'seller' ? 'var(--white)' : 'transparent',
+                color: activeRole === 'seller' ? 'var(--teal)' : 'var(--slate)',
+                boxShadow: activeRole === 'seller' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              Seller
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveRole('admin');
+                if (email === 'aarav@smartnest.ai' || email === 'prestige@smartnest.ai') {
+                  setEmail('admin@smartnest.ai');
+                  setPassword('adminpassword');
+                  setContact('');
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                fontWeight: activeRole === 'admin' ? 600 : 500,
+                fontSize: '13px',
+                cursor: 'pointer',
+                backgroundColor: activeRole === 'admin' ? 'var(--white)' : 'transparent',
+                color: activeRole === 'admin' ? 'var(--teal)' : 'var(--slate)',
+                boxShadow: activeRole === 'admin' ? 'var(--shadow-sm)' : 'none',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              Admin
+            </button>
+          </div>
         </div>
 
         {/* Global form error */}
@@ -136,7 +250,7 @@ export const LoginPage = () => {
                 id="login-email"
                 type="email"
                 className="smartnest-input"
-                placeholder="name@smartnest.ai"
+                placeholder={activeRole === 'seller' ? 'prestige@smartnest.ai' : 'name@smartnest.ai'}
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -166,7 +280,7 @@ export const LoginPage = () => {
             <div style={{ position: 'relative' }}>
               <input
                 id="login-password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 className="smartnest-input"
                 placeholder="••••••••"
                 value={password}
@@ -176,10 +290,35 @@ export const LoginPage = () => {
                 }}
                 style={{
                   paddingLeft: '38px',
+                  paddingRight: '40px',
                   borderColor: errors.password ? 'var(--rose)' : 'var(--border)'
                 }}
               />
               <Lock size={16} color="var(--slate)" style={{ position: 'absolute', left: '12px', top: '13px' }} />
+              {password.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--slate)'
+                  }}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              )}
             </div>
             {errors.password && (
               <span style={{ fontSize: '12px', color: 'var(--rose)', marginTop: '4px', display: 'block' }}>
@@ -187,6 +326,38 @@ export const LoginPage = () => {
               </span>
             )}
           </div>
+
+          {/* Contact field (Specifically for Seller Login: immediately below Password and above Remember me) */}
+          {activeRole === 'seller' && (
+            <div style={{ marginBottom: '18px' }}>
+              <label className="smartnest-label" htmlFor="login-contact">
+                Contact
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="login-contact"
+                  type="tel"
+                  className="smartnest-input"
+                  placeholder="Enter your contact number"
+                  value={contact}
+                  onChange={(e) => {
+                    setContact(e.target.value);
+                    if (errors.contact) setErrors((prev) => ({ ...prev, contact: '' }));
+                  }}
+                  style={{
+                    paddingLeft: '38px',
+                    borderColor: errors.contact ? 'var(--rose)' : 'var(--border)'
+                  }}
+                />
+                <Phone size={16} color="var(--slate)" style={{ position: 'absolute', left: '12px', top: '13px' }} />
+              </div>
+              {errors.contact && (
+                <span style={{ fontSize: '12px', color: 'var(--rose)', marginTop: '4px', display: 'block' }}>
+                  {errors.contact}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Remember me toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -220,25 +391,46 @@ export const LoginPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
             <button
               type="button"
+              data-autofill="buyer"
               onClick={() => fillCredentials('buyer')}
               className="btn btn-ghost"
-              style={{ fontSize: '11px', padding: '6px 4px', border: '1px solid var(--border)' }}
+              style={{
+                fontSize: '11px',
+                padding: '6px 4px',
+                border: activeRole === 'buyer' ? '1px solid var(--teal)' : '1px solid var(--border)',
+                backgroundColor: activeRole === 'buyer' ? 'var(--teal-light)' : 'transparent',
+                color: activeRole === 'buyer' ? 'var(--teal)' : 'var(--slate)'
+              }}
             >
               Buyer
             </button>
             <button
               type="button"
+              data-autofill="seller"
               onClick={() => fillCredentials('seller')}
               className="btn btn-ghost"
-              style={{ fontSize: '11px', padding: '6px 4px', border: '1px solid var(--border)' }}
+              style={{
+                fontSize: '11px',
+                padding: '6px 4px',
+                border: activeRole === 'seller' ? '1px solid var(--teal)' : '1px solid var(--border)',
+                backgroundColor: activeRole === 'seller' ? 'var(--teal-light)' : 'transparent',
+                color: activeRole === 'seller' ? 'var(--teal)' : 'var(--slate)'
+              }}
             >
               Seller
             </button>
             <button
               type="button"
+              data-autofill="admin"
               onClick={() => fillCredentials('admin')}
               className="btn btn-ghost"
-              style={{ fontSize: '11px', padding: '6px 4px', border: '1px solid var(--border)' }}
+              style={{
+                fontSize: '11px',
+                padding: '6px 4px',
+                border: activeRole === 'admin' ? '1px solid var(--teal)' : '1px solid var(--border)',
+                backgroundColor: activeRole === 'admin' ? 'var(--teal-light)' : 'transparent',
+                color: activeRole === 'admin' ? 'var(--teal)' : 'var(--slate)'
+              }}
             >
               Admin
             </button>

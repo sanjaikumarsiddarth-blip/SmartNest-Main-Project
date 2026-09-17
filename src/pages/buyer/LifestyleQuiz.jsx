@@ -8,7 +8,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Sparkles,
-  GripVertical,
   Check,
   Building,
   Car,
@@ -35,17 +34,6 @@ const AMENITIES_LIST = [
   "Pharmacy"
 ];
 
-const INITIAL_PRIORITIES = [
-  { id: "commute", label: "Commute Time" },
-  { id: "budget", label: "Budget Ceiling" },
-  { id: "schools", label: "School Proximity" },
-  { id: "healthcare", label: "Healthcare Facilities" },
-  { id: "noise", label: "Acoustic Serenity (Low Noise)" },
-  { id: "safety", label: "Neighborhood Safety" },
-  { id: "parks", label: "Green Space & Parks" },
-  { id: "amenities", label: "Clubhouse & Lifestyle Amenities" }
-];
-
 export const LifestyleQuiz = () => {
   const navigate = useNavigate();
   const { sessionId } = useAuth();
@@ -53,15 +41,16 @@ export const LifestyleQuiz = () => {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
-  // Form State
+  // Form State - Exactly 5 Steps
   const [formData, setFormData] = useState({
     // Step 1: Basic Requirements
     budget: 5500000, // ₹55L
     city: "Coimbatore",
-    property_type: "Apartment", // Apartment | Villa | Independent House | Plot
+    property_type: "Apartment", // Apartment | Villa | Independent House
     bhk: 2, // 1 | 2 | 3 | 4
-    family_size: 3,
+    household_type: "family", // bachelor | couple | family
 
     // Step 2: Daily Life
     workplace: "Tidel Park / Peelamedu Tech Corridor",
@@ -81,23 +70,7 @@ export const LifestyleQuiz = () => {
     park_walking: true,
 
     // Step 5: Amenities
-    amenities: ["Supermarket", "School", "Park", "Metro/Bus Stop", "Gym"],
-
-    // Step 6: Lifestyle Priorities (Ordered list)
-    priorities: INITIAL_PRIORITIES,
-
-    // Step 7: Dealbreakers (5 toggle cards)
-    dealbreakers: {
-      commute_toggle: true,
-      commute_limit: 30,
-      budget_toggle: true,
-      budget_limit: 60, // in Lakhs
-      bhk_toggle: true,
-      bhk_min: 2,
-      noise_low: true,
-      school_toggle: true,
-      school_dist: 2.5
-    }
+    amenities: ["Supermarket", "School", "Park", "Metro/Bus Stop", "Gym"]
   });
 
   // Keyboard Navigation: Enter advances, Esc goes back
@@ -108,7 +81,7 @@ export const LifestyleQuiz = () => {
       } else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
         // Prevent default form submit on Enter
         e.preventDefault();
-        if (currentStep < 7) {
+        if (currentStep < 5) {
           setCurrentStep((prev) => prev + 1);
         }
       }
@@ -116,35 +89,6 @@ export const LifestyleQuiz = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentStep]);
-
-  // Drag and Drop Ranking handlers for Step 6
-  const [draggedIndex, setDraggedIndex] = useState(null);
-
-  const handleDragStart = (idx) => {
-    setDraggedIndex(idx);
-  };
-
-  const handleDragOver = (e, idx) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === idx) return;
-
-    const items = [...formData.priorities];
-    const draggedItem = items[draggedIndex];
-    items.splice(draggedIndex, 1);
-    items.splice(idx, 0, draggedItem);
-    setDraggedIndex(idx);
-    setFormData((prev) => ({ ...prev, priorities: items }));
-  };
-
-  const handleMoveRank = (idx, direction) => {
-    const targetIdx = idx + direction;
-    if (targetIdx < 0 || targetIdx >= formData.priorities.length) return;
-    const items = [...formData.priorities];
-    const temp = items[idx];
-    items[idx] = items[targetIdx];
-    items[targetIdx] = temp;
-    setFormData((prev) => ({ ...prev, priorities: items }));
-  };
 
   // Toggle amenity chip
   const toggleAmenity = (name) => {
@@ -159,14 +103,14 @@ export const LifestyleQuiz = () => {
     });
   };
 
-  // Final Submission
+  // Final Submission from Step 5
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      // Call analyzeLifestyle then getRecommendations as per prompt
-      const profile = await api.analyzeLifestyle({
+      // Call analyzeLifestyle then getRecommendations
+      await api.analyzeLifestyle({
         ...formData,
-        priorities: formData.priorities.map((p) => p.id),
         session_id: sessionId
       });
 
@@ -178,21 +122,24 @@ export const LifestyleQuiz = () => {
 
       addToast({
         type: 'success',
-        message: 'Your lifestyle profile has been synthesized!'
+        message: 'Your lifestyle profile has been synthesized and AI agent webhook recorded!'
       });
 
       // Navigate to /buyer/profile on success
       navigate('/buyer/profile');
     } catch (err) {
+      console.error('Quiz submission error:', err);
+      const friendlyMsg = err.message || 'Unable to analyze your lifestyle right now.';
+      setSubmitError(friendlyMsg);
       addToast({
         type: 'error',
-        message: err.message || 'Analysis could not be completed.'
+        message: friendlyMsg
       });
       setIsSubmitting(false);
     }
   };
 
-  const progressPct = (currentStep / 7) * 100;
+  const progressPct = (currentStep / 5) * 100;
 
   return (
     <div className="page-entrance" style={{ minHeight: '90vh', paddingBottom: '80px' }}>
@@ -231,7 +178,7 @@ export const LifestyleQuiz = () => {
             </span>
           </div>
           <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--slate)' }}>
-            Step {currentStep} of 7
+            Step {currentStep} of 5
           </span>
         </div>
 
@@ -320,7 +267,7 @@ export const LifestyleQuiz = () => {
               <div style={{ marginBottom: '24px' }}>
                 <label className="smartnest-label">Property Type</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-                  {["Apartment", "Villa", "Independent House", "Plot"].map((type) => (
+                  {["Apartment", "Villa", "Independent House"].map((type) => (
                     <button
                       key={type}
                       type="button"
@@ -360,27 +307,37 @@ export const LifestyleQuiz = () => {
                 </div>
               </div>
 
-              {/* Family Size Stepper (1-10) */}
+              {/* Who will be living here? (Bachelor, Couple, Family) */}
               <div>
-                <label className="smartnest-label">Family Size (Occupants)</label>
-                <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, family_size: Math.max(1, formData.family_size - 1) })}
-                    style={{ padding: '8px 16px', background: 'var(--mist)', border: 'none', cursor: 'pointer' }}
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <span style={{ padding: '8px 24px', fontWeight: 600, fontSize: '15px' }}>
-                    {formData.family_size}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, family_size: Math.min(10, formData.family_size + 1) })}
-                    style={{ padding: '8px 16px', background: 'var(--mist)', border: 'none', cursor: 'pointer' }}
-                  >
-                    <Plus size={14} />
-                  </button>
+                <label className="smartnest-label">Who will be living here?</label>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'bachelor', label: 'Bachelor' },
+                    { id: 'couple', label: 'Couple' },
+                    { id: 'family', label: 'Family' }
+                  ].map((item) => {
+                    const isSelected = formData.household_type === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, household_type: item.id })}
+                        className={`btn ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
+                        style={{
+                          border: isSelected ? '1px solid var(--teal)' : '1px solid var(--border)',
+                          padding: '10px 20px',
+                          fontSize: '14px',
+                          fontWeight: isSelected ? 600 : 500,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {item.label}
+                        {isSelected && <Check size={14} />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -689,296 +646,39 @@ export const LifestyleQuiz = () => {
                   );
                 })}
               </div>
-            </div>
-          )}
 
-          {/* STEP 6: Lifestyle Priorities (Drag-and-drop ranked list) */}
-          {currentStep === 6 && (
-            <div>
-              <div style={{ marginBottom: '28px' }}>
-                <span className="badge-pill badge-teal" style={{ marginBottom: '8px' }}>Step 6: Priority Hierarchy</span>
-                <h2 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--ink)' }}>
-                  Lifestyle Priorities
-                </h2>
-                <p style={{ fontSize: '14px', color: 'var(--slate)', marginTop: '4px' }}>
-                  Drag to rank — most important at the top. (Or use the arrow controls on the right).
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {formData.priorities.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={() => handleDragStart(idx)}
-                    onDragOver={(e) => handleDragOver(e, idx)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      backgroundColor: idx === 0 ? 'var(--teal-light)' : 'var(--white)',
-                      border: `1px solid ${idx === 0 ? 'var(--teal)' : 'var(--border)'}`,
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: 'var(--shadow-sm)',
-                      cursor: 'grab'
-                    }}
+              {submitError && (
+                <div
+                  style={{
+                    marginTop: '20px',
+                    padding: '14px 18px',
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FCA5A5',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px'
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '13px', color: '#991B1B' }}>
+                      Workflow Request Notice
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#B91C1C', marginTop: '2px' }}>
+                      {submitError}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    className="btn btn-sm btn-primary"
+                    style={{ whiteSpace: 'nowrap' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <GripVertical size={18} color="var(--slate)" />
-                      <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
-                        {item.label}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {/* Keyboard / accessible shift buttons */}
-                      <button
-                        type="button"
-                        onClick={() => handleMoveRank(idx, -1)}
-                        disabled={idx === 0}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: idx === 0 ? 0.3 : 1 }}
-                        aria-label="Move item up"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveRank(idx, 1)}
-                        disabled={idx === formData.priorities.length - 1}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: idx === formData.priorities.length - 1 ? 0.3 : 1 }}
-                        aria-label="Move item down"
-                      >
-                        ↓
-                      </button>
-
-                      {/* Rank Number Badge */}
-                      <span
-                        style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          backgroundColor: idx === 0 ? 'var(--teal)' : 'var(--mist)',
-                          color: idx === 0 ? '#FFFFFF' : 'var(--slate)',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        #{idx + 1}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 7: Dealbreakers (5 toggle cards) */}
-          {currentStep === 7 && (
-            <div>
-              <div style={{ marginBottom: '28px' }}>
-                <span className="badge-pill badge-rose" style={{ marginBottom: '8px' }}>Step 7: Non-Negotiables</span>
-                <h2 style={{ fontSize: '26px', fontWeight: 700, color: 'var(--ink)' }}>
-                  Dealbreakers
-                </h2>
-                <p style={{ fontSize: '14px', color: 'var(--slate)', marginTop: '4px' }}>
-                  Properties violating these conditions will be flagged with dealbreaker alerts or filtered out.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {/* 1. Commute under X min */}
-                <div
-                  style={{
-                    padding: '16px 20px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                    backgroundColor: formData.dealbreakers.commute_toggle ? '#FFFDF8' : 'var(--white)'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="checkbox"
-                        checked={formData.dealbreakers.commute_toggle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          dealbreakers: { ...formData.dealbreakers, commute_toggle: e.target.checked }
-                        })}
-                        style={{ width: '18px', height: '18px', accentColor: 'var(--rose)' }}
-                      />
-                      Commute must be strictly under:
-                    </label>
-
-                    {formData.dealbreakers.commute_toggle && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input
-                          type="number"
-                          className="smartnest-input"
-                          style={{ width: '80px', padding: '6px 8px' }}
-                          value={formData.dealbreakers.commute_limit}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            dealbreakers: { ...formData.dealbreakers, commute_limit: Number(e.target.value) }
-                          })}
-                        />
-                        <span style={{ fontSize: '13px', color: 'var(--slate)' }}>minutes</span>
-                      </div>
-                    )}
-                  </div>
+                    Try Again
+                  </button>
                 </div>
-
-                {/* 2. Budget cannot exceed ₹X Lakhs */}
-                <div
-                  style={{
-                    padding: '16px 20px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                    backgroundColor: formData.dealbreakers.budget_toggle ? '#FFFDF8' : 'var(--white)'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="checkbox"
-                        checked={formData.dealbreakers.budget_toggle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          dealbreakers: { ...formData.dealbreakers, budget_toggle: e.target.checked }
-                        })}
-                        style={{ width: '18px', height: '18px', accentColor: 'var(--rose)' }}
-                      />
-                      Budget cannot exceed:
-                    </label>
-
-                    {formData.dealbreakers.budget_toggle && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '13px', color: 'var(--slate)' }}>₹</span>
-                        <input
-                          type="number"
-                          className="smartnest-input"
-                          style={{ width: '90px', padding: '6px 8px' }}
-                          value={formData.dealbreakers.budget_limit}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            dealbreakers: { ...formData.dealbreakers, budget_limit: Number(e.target.value) }
-                          })}
-                        />
-                        <span style={{ fontSize: '13px', color: 'var(--slate)' }}>Lakhs</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. Must have at least X BHK */}
-                <div
-                  style={{
-                    padding: '16px 20px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                    backgroundColor: formData.dealbreakers.bhk_toggle ? '#FFFDF8' : 'var(--white)'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="checkbox"
-                        checked={formData.dealbreakers.bhk_toggle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          dealbreakers: { ...formData.dealbreakers, bhk_toggle: e.target.checked }
-                        })}
-                        style={{ width: '18px', height: '18px', accentColor: 'var(--rose)' }}
-                      />
-                      Must have at least:
-                    </label>
-
-                    {formData.dealbreakers.bhk_toggle && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input
-                          type="number"
-                          className="smartnest-input"
-                          style={{ width: '70px', padding: '6px 8px' }}
-                          value={formData.dealbreakers.bhk_min}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            dealbreakers: { ...formData.dealbreakers, bhk_min: Number(e.target.value) }
-                          })}
-                        />
-                        <span style={{ fontSize: '13px', color: 'var(--slate)' }}>BHK</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 4. Noise level must be low (toggle only) */}
-                <div
-                  style={{
-                    padding: '16px 20px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                    backgroundColor: formData.dealbreakers.noise_low ? '#FFFDF8' : 'var(--white)'
-                  }}
-                >
-                  <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <input
-                      type="checkbox"
-                      checked={formData.dealbreakers.noise_low}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        dealbreakers: { ...formData.dealbreakers, noise_low: e.target.checked }
-                      })}
-                      style={{ width: '18px', height: '18px', accentColor: 'var(--rose)' }}
-                    />
-                    Noise level must be strictly low (No commercial thoroughfares)
-                  </label>
-                </div>
-
-                {/* 5. School must be within X km */}
-                <div
-                  style={{
-                    padding: '16px 20px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border)',
-                    backgroundColor: formData.dealbreakers.school_toggle ? '#FFFDF8' : 'var(--white)'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="checkbox"
-                        checked={formData.dealbreakers.school_toggle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          dealbreakers: { ...formData.dealbreakers, school_toggle: e.target.checked }
-                        })}
-                        style={{ width: '18px', height: '18px', accentColor: 'var(--rose)' }}
-                      />
-                      Accredited school must be within:
-                    </label>
-
-                    {formData.dealbreakers.school_toggle && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input
-                          type="number"
-                          step="0.5"
-                          className="smartnest-input"
-                          style={{ width: '80px', padding: '6px 8px' }}
-                          value={formData.dealbreakers.school_dist}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            dealbreakers: { ...formData.dealbreakers, school_dist: Number(e.target.value) }
-                          })}
-                        />
-                        <span style={{ fontSize: '13px', color: 'var(--slate)' }}>km</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1006,7 +706,7 @@ export const LifestyleQuiz = () => {
               <div />
             )}
 
-            {currentStep < 7 ? (
+            {currentStep < 5 ? (
               <button
                 type="button"
                 onClick={() => setCurrentStep((prev) => prev + 1)}
@@ -1019,10 +719,16 @@ export const LifestyleQuiz = () => {
               <button
                 type="button"
                 onClick={handleSubmit}
+                disabled={isSubmitting}
                 className="btn btn-primary"
-                style={{ padding: '12px 32px', fontSize: '15px' }}
+                style={{
+                  padding: '12px 32px',
+                  fontSize: '15px',
+                  opacity: isSubmitting ? 0.75 : 1,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer'
+                }}
               >
-                Analyze My Lifestyle
+                {isSubmitting ? 'Analyzing & Triggering Agent...' : 'Analyze My Lifestyle'}
               </button>
             )}
           </div>

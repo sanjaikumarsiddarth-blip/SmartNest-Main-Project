@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { PropertyCard } from '../../components/shared/PropertyCard';
+import { UpgradeModal } from '../../components/subscription/UpgradeModal';
 import {
   Building,
   Upload,
@@ -11,7 +13,10 @@ import {
   Check,
   MapPin,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Trash2,
+  X,
+  AlertCircle
 } from 'lucide-react';
 
 const AMENITIES_OPTIONS = [
@@ -29,21 +34,57 @@ const AMENITIES_OPTIONS = [
   "Pharmacy"
 ];
 
+// Helper to downscale/compress image file to keep localStorage well within quota
+const compressImageFile = (file, maxWidth = 900, maxHeight = 700, quality = 0.75) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = (err) => reject(err);
+      img.src = e.target.result;
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+};
+
 export const AddEditPropertyPage = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addToast } = useToast();
+  const { subscription, usage, canCreateProperty } = useSubscription();
+  const fileInputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [existingProperty, setExistingProperty] = useState(null);
 
   const [formData, setFormData] = useState({
     title: 'Emerald Palms Executive Suite',
     type: 'Apartment',
     price: 5800000,
     bhk: 2,
-    area_sqft: 1250,
     bedrooms: 2,
-    bathrooms: 2,
     parking: true,
     address: 'Near Tidel Park, Civil Aerodrome Post',
     city: 'Coimbatore',
@@ -71,26 +112,25 @@ export const AddEditPropertyPage = () => {
         try {
           const p = await api.getProperty(id);
           if (p) {
+            setExistingProperty(p);
             setFormData({
               title: p.title || '',
               type: p.type || 'Apartment',
               price: p.price || 5000000,
               bhk: p.bhk || 2,
-              area_sqft: p.area_sqft || 1100,
               bedrooms: p.bhk || 2,
-              bathrooms: 2,
-              parking: true,
-              address: p.location || '',
+              parking: p.parking !== undefined ? Boolean(p.parking) : true,
+              address: p.location || p.address || '',
               city: p.city || 'Coimbatore',
-              lat: 11.016,
-              lng: 76.955,
+              lat: p.coordinates?.lat || 11.016,
+              lng: p.coordinates?.lng || 76.955,
               description: p.description || '',
               school_distance_km: p.school_distance_km || 1.5,
               hospital_distance_km: p.hospital_distance_km || 2.0,
               park_distance_km: p.park_distance_km || 0.5,
               noise_level: p.noise_level || 'low',
               green_score: p.green_score || 85,
-              amenities: ['Supermarket', 'School', 'Park', 'Parking'],
+              amenities: p.amenities || ['Supermarket', 'School', 'Park', 'Parking'],
               images: p.images || []
             });
           }
@@ -112,25 +152,130 @@ export const AddEditPropertyPage = () => {
     });
   };
 
-  const handleImageMockDrop = (e) => {
-    e.preventDefault();
-    addToast({ type: 'info', message: 'Sample architectural imagery loaded for listing.' });
+  const handleFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    const validFiles = [];
+
+    for (const file of fileArray) {
+      const isValidType = file.type === 'image/jpeg' || file.type === 'image/png' || file.name?.match(/\.(jpe?g|png)$/i);
+      if (!isValidType) {
+        addToast({ type: 'error', message: `${file.name} is not a valid JPG or PNG image.` });
+        continue;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        addToast({ type: 'error', message: `${file.name} exceeds the 10MB limit.` });
+        continue;
+      }
+
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) return;
+
+    const currentImages = formData.images || [];
+    const availableSlots = 5 - currentImages.length;
+
+    if (availableSlots <= 0) {
+      addToast({ type: 'warning', message: 'Maximum 5 photos allowed. Remove a photo to upload new ones.' });
+      return;
+    }
+
+    const filesToProcess = validFiles.slice(0, availableSlots);
+    if (validFiles.length > availableSlots) {
+      addToast({ type: 'warning', message: `Only ${availableSlots} more photo${availableSlots > 1 ? 's' : ''} can be added (max 5 photos).` });
+    }
+
+    try {
+      const compressedPromises = filesToProcess.map((f) => compressImageFile(f));
+      const newImages = await Promise.all(compressedPromises);
+
+      setFormData((prev) => ({
+        ...prev,
+        images: [...(prev.images || []), ...newImages]
+      }));
+      addToast({ type: 'success', message: `Added ${newImages.length} listing photo${newImages.length > 1 ? 's' : ''}.` });
+    } catch (err) {
+      console.error('Error processing listing photos', err);
+      addToast({ type: 'error', message: 'Could not process one or more images.' });
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    handleFiles(e.target.files);
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    setFormData((prev) => ({
+      ...prev,
+      images: (prev.images || []).filter((_, idx) => idx !== indexToRemove)
+    }));
+    addToast({ type: 'info', message: 'Photo removed.' });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
+    if (!isEdit && !canCreateProperty()) {
+      setShowUpgradeModal(true);
+      addToast({
+        type: 'warning',
+        message: `Plan limit reached (${usage?.properties_published || 0}/${usage?.property_limit || 1} properties). Please upgrade to publish more.`
+      });
+      return;
+    }
+
+    if (!formData.title || !formData.title.trim()) {
+      addToast({ type: 'error', message: 'Please enter a property title.' });
+      return;
+    }
+
+    if (!formData.price || Number(formData.price) <= 0) {
+      addToast({ type: 'error', message: 'Please enter a valid property price.' });
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (isEdit) {
-        await api.updateProperty(id, formData);
+        const updatePayload = {
+          ...formData,
+          ...(existingProperty?.area_sqft !== undefined ? { area_sqft: existingProperty.area_sqft } : {}),
+          ...(existingProperty?.bathrooms !== undefined ? { bathrooms: existingProperty.bathrooms } : {})
+        };
+        await api.updateProperty(id, updatePayload);
         addToast({ type: 'success', message: 'Property listing updated successfully.' });
       } else {
-        await api.createProperty({ ...formData, seller_id: user?.user_id });
-        addToast({ type: 'success', message: 'Property submitted for admin approval.' });
+        const realUserId = user?.user_id || user?.id || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('smartnest_user') || '{}')?.user_id || JSON.parse(localStorage.getItem('smartnest_user') || '{}')?.id : '') || '';
+        const realUserName = user?.name || user?.user_metadata?.full_name || (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('smartnest_user') || '{}')?.name : '') || 'Seller';
+        const realSessionId = user?.session_id || (typeof localStorage !== 'undefined' ? localStorage.getItem('smartnest_session_id') : '') || '';
+
+        const createPayload = {
+          ...formData,
+          seller_id: realUserId,
+          user_id: realUserId,
+          seller_name: realUserName,
+          user_name: realUserName,
+          session_id: realSessionId
+        };
+        await api.createSellerProperty(createPayload);
+        await api.getSellerProperties(realUserId || user?.user_id);
+        addToast({ type: 'success', message: 'Property published successfully.' });
       }
       navigate('/seller/properties');
     } catch (err) {
-      addToast({ type: 'error', message: 'Failed to submit property.' });
+      console.error('Failed to publish/save property:', err);
+      if (err.message && err.message.includes('limit')) {
+        setShowUpgradeModal(true);
+        addToast({ type: 'warning', message: err.message });
+      } else {
+        addToast({ type: 'error', message: err.message || 'Unable to publish property. Please try again.' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -143,7 +288,7 @@ export const AddEditPropertyPage = () => {
     type: formData.type,
     price: formData.price,
     bhk: formData.bhk,
-    area_sqft: formData.area_sqft,
+    area_sqft: existingProperty?.area_sqft || undefined,
     location: formData.address || 'Address',
     city: formData.city || 'City',
     commute_minutes: 20,
@@ -178,6 +323,51 @@ export const AddEditPropertyPage = () => {
           </div>
         </div>
 
+        {/* Property Limit Reached Warning Banner */}
+        {!isEdit && !canCreateProperty() && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              backgroundColor: '#FEF3C7',
+              border: '1px solid #F59E0B',
+              color: '#92400E',
+              marginBottom: '28px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <AlertCircle size={24} color="#D97706" style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '15px' }}>
+                  Property Listing Limit Reached ({usage?.properties_published || 0} / {usage?.property_limit || 1})
+                </div>
+                <div style={{ fontSize: '13px', color: '#B45309' }}>
+                  Your current {subscription?.plan_name || 'Free'} plan allows up to {usage?.property_limit || 1} listing{usage?.property_limit === 1 ? '' : 's'}. Upgrade your subscription to publish additional properties.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUpgradeModal(true)}
+              className="btn btn-primary"
+              style={{
+                whiteSpace: 'nowrap',
+                backgroundColor: '#D97706',
+                borderColor: '#D97706',
+                padding: '8px 18px',
+                fontSize: '13px'
+              }}
+            >
+              Upgrade Plan
+            </button>
+          </div>
+        )}
+
         {/* ── TWO-COLUMN FORM LAYOUT (FIELDS LEFT, PREVIEW RIGHT) ── */}
         <div
           style={{
@@ -206,7 +396,7 @@ export const AddEditPropertyPage = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '16px' }}>
                 <div>
                   <label className="smartnest-label">Property Type</label>
                   <select
@@ -217,7 +407,6 @@ export const AddEditPropertyPage = () => {
                     <option value="Apartment">Apartment</option>
                     <option value="Villa">Villa</option>
                     <option value="Independent House">Independent House</option>
-                    <option value="Plot">Plot</option>
                   </select>
                 </div>
 
@@ -245,7 +434,7 @@ export const AddEditPropertyPage = () => {
                     <button
                       key={n}
                       type="button"
-                      onClick={() => setFormData({ ...formData, bhk: n, bedrooms: n })}
+                      onClick={() => setFormData((prev) => ({ ...prev, bhk: n, bedrooms: n }))}
                       className={`btn ${formData.bhk === n ? 'btn-primary' : 'btn-ghost'}`}
                       style={{
                         border: formData.bhk === n ? '1px solid var(--teal)' : '1px solid var(--border)',
@@ -259,37 +448,16 @@ export const AddEditPropertyPage = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label className="smartnest-label">Area (sq.ft)</label>
-                  <input
-                    type="number"
-                    className="smartnest-input"
-                    value={formData.area_sqft}
-                    onChange={(e) => setFormData({ ...formData, area_sqft: Number(e.target.value) })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="smartnest-label">Bathrooms</label>
-                  <input
-                    type="number"
-                    className="smartnest-input"
-                    value={formData.bathrooms}
-                    onChange={(e) => setFormData({ ...formData, bathrooms: Number(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <label className="smartnest-label">Covered Parking</label>
-                  <select
-                    className="smartnest-input"
-                    value={formData.parking ? 'yes' : 'no'}
-                    onChange={(e) => setFormData({ ...formData, parking: e.target.value === 'yes' })}
-                  >
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                  </select>
-                </div>
+              <div>
+                <label className="smartnest-label">Covered Parking</label>
+                <select
+                  className="smartnest-input"
+                  value={formData.parking ? 'yes' : 'no'}
+                  onChange={(e) => setFormData({ ...formData, parking: e.target.value === 'yes' })}
+                >
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
               </div>
             </div>
 
@@ -479,30 +647,225 @@ export const AddEditPropertyPage = () => {
 
             {/* Section 6: Image Upload Area */}
             <div className="smartnest-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', marginBottom: '16px' }}>
-                Property Photos
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ink)', margin: 0 }}>
+                  Property Photos
+                </h3>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: (formData.images?.length || 0) >= 5 ? 'var(--teal)' : 'var(--slate)' }}>
+                  {formData.images?.length || 0} / 5 photos
+                </span>
+              </div>
+
+              {/* Hidden File Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleFileSelect}
+                aria-label="Upload property listing photos"
+              />
+
+              {/* Upload Dropzone */}
               <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleImageMockDrop}
-                onClick={handleImageMockDrop}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(true);
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(false);
+                  if (e.dataTransfer?.files) {
+                    handleFiles(e.dataTransfer.files);
+                  }
+                }}
+                onClick={() => {
+                  if ((formData.images?.length || 0) >= 5) {
+                    addToast({ type: 'warning', message: 'Maximum 5 photos reached. Remove a photo to upload more.' });
+                  } else {
+                    fileInputRef.current?.click();
+                  }
+                }}
                 style={{
-                  border: '2px dashed var(--border)',
+                  border: isDragging ? '2px dashed var(--teal)' : '2px dashed var(--border)',
                   borderRadius: '12px',
                   padding: '32px',
                   textAlign: 'center',
-                  cursor: 'pointer',
-                  backgroundColor: 'var(--mist)'
+                  cursor: (formData.images?.length || 0) >= 5 ? 'not-allowed' : 'pointer',
+                  backgroundColor: isDragging ? 'var(--teal-light)' : 'var(--mist)',
+                  transition: 'all var(--transition-fast)'
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Upload photos area"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if ((formData.images?.length || 0) >= 5) {
+                      addToast({ type: 'warning', message: 'Maximum 5 photos reached. Remove a photo to upload more.' });
+                    } else {
+                      fileInputRef.current?.click();
+                    }
+                  }
                 }}
               >
-                <Upload size={32} color="var(--slate)" style={{ margin: '0 auto 8px auto' }} />
-                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
-                  Drag and drop listing photos here, or browse
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--slate)', marginTop: '4px' }}>
-                  Supports JPG, PNG (Max 5 photos, 10MB per file)
-                </div>
+                {(formData.images?.length || 0) >= 5 ? (
+                  <>
+                    <Check size={32} color="var(--teal)" style={{ margin: '0 auto 8px auto' }} />
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
+                      Maximum 5 photos uploaded
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--slate)', marginTop: '4px' }}>
+                      Remove an existing photo below if you want to upload a different one.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={32} color={isDragging ? 'var(--teal)' : 'var(--slate)'} style={{ margin: '0 auto 8px auto' }} />
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
+                      {isDragging ? 'Drop photos here' : 'Drag and drop listing photos here, or browse'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--slate)', marginTop: '4px' }}>
+                      Supports JPG, PNG (Max 5 photos, 10MB per file)
+                    </div>
+                  </>
+                )}
               </div>
+
+              {/* Uploaded Photo Preview Gallery */}
+              {formData.images && formData.images.length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
+                      Current Photos ({formData.images.length} / 5)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, images: [] }));
+                        addToast({ type: 'info', message: 'All photos removed.' });
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--rose)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Trash2 size={12} /> Clear all
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                      gap: '12px'
+                    }}
+                  >
+                    {formData.images.map((imgUrl, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'relative',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          aspectRatio: '4 / 3',
+                          border: idx === 0 ? '2px solid var(--teal)' : '1px solid var(--border)',
+                          backgroundColor: 'var(--mist)',
+                          boxShadow: 'var(--shadow-sm)'
+                        }}
+                      >
+                        <img
+                          src={imgUrl}
+                          alt={`Listing photo ${idx + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        {idx === 0 && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              top: '6px',
+                              left: '6px',
+                              backgroundColor: 'var(--teal)',
+                              color: '#FFFFFF',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              lineHeight: 1
+                            }}
+                          >
+                            Cover
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveImage(idx);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            right: '6px',
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            backgroundColor: 'rgba(13, 27, 42, 0.75)',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s ease'
+                          }}
+                          title="Remove photo"
+                          aria-label={`Remove photo ${idx + 1}`}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--rose)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(13, 27, 42, 0.75)'; }}
+                        >
+                          <X size={14} />
+                        </button>
+                        <div
+                          style={{
+                            position: 'absolute',
+                            bottom: '4px',
+                            right: '6px',
+                            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                            color: '#FFFFFF',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            padding: '1px 5px',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          #{idx + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Submit Button */}
@@ -512,7 +875,7 @@ export const AddEditPropertyPage = () => {
               style={{ width: '100%', padding: '14px', fontSize: '16px' }}
               disabled={submitting}
             >
-              {submitting ? 'Submitting...' : isEdit ? 'Save Listing Changes' : 'Publish Property'}
+              {submitting ? (isEdit ? 'Saving Changes...' : 'Publishing Property...') : isEdit ? 'Save Listing Changes' : 'Publish Property'}
             </button>
           </form>
 
@@ -541,6 +904,15 @@ export const AddEditPropertyPage = () => {
             </div>
           </div>
         </div>
+
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          limitType="properties"
+          currentPlan={subscription?.plan_id || 'seller_free'}
+          userRole="seller"
+          usage={usage}
+        />
       </div>
     </div>
   );

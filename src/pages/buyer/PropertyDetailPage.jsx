@@ -1,13 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useCompare } from '../../context/CompareContext';
+import { useSubscription } from '../../context/SubscriptionContext';
 import { MatchScoreBadge } from '../../components/shared/MatchScoreBadge';
 import { ScoreBreakdownBar } from '../../components/shared/ScoreBreakdownBar';
 import { SkeletonCard } from '../../components/shared/SkeletonCard';
 import { formatPriceINR } from '../../components/shared/PropertyCard';
 import { LiveMapModal } from '../../components/shared/LiveMapModal';
+import { UpgradeModal } from '../../components/subscription/UpgradeModal';
 import {
   Heart,
   Scale,
@@ -23,7 +27,13 @@ import {
   X,
   Send,
   Star,
-  Compass
+  Compass,
+  CheckCircle2,
+  AlertTriangle,
+  Building2,
+  ShieldCheck,
+  Phone,
+  Mail
 } from 'lucide-react';
 
 export const PropertyDetailPage = () => {
@@ -31,17 +41,23 @@ export const PropertyDetailPage = () => {
   const navigate = useNavigate();
   const { sessionId } = useAuth();
   const { addToast } = useToast();
+  const { addToCompare, isInCompare } = useCompare();
+  const { subscription, usage, canContactSeller } = useSubscription();
 
   const [property, setProperty] = useState(null);
+  const [seller, setSeller] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('schools'); // 'schools' | 'hospitals' | 'parks' | 'transport'
   const [lightboxImage, setLightboxImage] = useState(null);
   const [enquiryModalOpen, setEnquiryModalOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [enquiryMessage, setEnquiryMessage] = useState('');
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [mapCategory, setMapCategory] = useState('property');
   const [isSaved, setIsSaved] = useState(false);
   const [sendingEnquiry, setSendingEnquiry] = useState(false);
+
+  const modalContentRef = useRef(null);
 
   useEffect(() => {
     const fetchProperty = async () => {
@@ -49,6 +65,10 @@ export const PropertyDetailPage = () => {
       try {
         const data = await api.getProperty(id);
         setProperty(data);
+        if (data?.seller_id) {
+          const sellerData = await api.getSellerDetails(data.seller_id);
+          setSeller(sellerData);
+        }
         const saved = await api.getSavedProperties(sessionId);
         setIsSaved(saved.properties.some((p) => p.property_id === id));
       } catch (err) {
@@ -60,6 +80,68 @@ export const PropertyDetailPage = () => {
 
     fetchProperty();
   }, [id, sessionId, addToast]);
+
+  // Lock body scroll when enquiry modal is open & reset modal scroll to top
+  useEffect(() => {
+    if (enquiryModalOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      // Reset modal content scroll to top
+      if (modalContentRef.current) {
+        modalContentRef.current.scrollTop = 0;
+      }
+
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [enquiryModalOpen]);
+
+  // Keyboard accessibility: Escape key closes modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && enquiryModalOpen) {
+        setEnquiryModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [enquiryModalOpen]);
+
+  const handleOpenEnquiryModal = async () => {
+    // Check if buyer has an existing conversation with this property or seller
+    try {
+      const convos = await api.getConversations(sessionId || 'usr_buyer_01');
+      const hasExistingConvo = convos && convos.some(
+        (c) => c.property_id === id || (property?.seller_id && c.seller_id === property.seller_id)
+      );
+
+      // If no existing conversation and contact allowance is exhausted, block and prompt upgrade
+      if (!hasExistingConvo && !canContactSeller()) {
+        setShowUpgradeModal(true);
+        addToast({
+          type: 'warning',
+          message: `You have exhausted your contact quota (${usage?.contacts_used || 0}/${usage?.contact_limit || 15} contacts). Upgrade your plan to connect with more sellers.`
+        });
+        return;
+      }
+    } catch (err) {
+      console.error('Error verifying contact allowance:', err);
+    }
+
+    if (!enquiryMessage && property) {
+      setEnquiryMessage(
+        `Hi, I am interested in ${property.title} located at ${property.location}. Please share more details, floor plan, and schedule a site visit.`
+      );
+    }
+    setEnquiryModalOpen(true);
+    requestAnimationFrame(() => {
+      if (modalContentRef.current) {
+        modalContentRef.current.scrollTop = 0;
+      }
+    });
+  };
 
   const handleSaveToggle = async () => {
     try {
@@ -83,12 +165,22 @@ export const PropertyDetailPage = () => {
 
     setSendingEnquiry(true);
     try {
-      await api.sendEnquiry(id, enquiryMessage, sessionId);
-      addToast({ type: 'success', message: 'Your message has been delivered to the seller.' });
+      const res = await api.sendEnquiry(id, enquiryMessage, sessionId);
+      const targetSellerName = res?.seller_name || seller?.seller_name || 'Verified Seller';
+      addToast({
+        type: 'success',
+        message: `Enquiry sent to ${targetSellerName} — Your conversation is now available in Message Box.`
+      });
       setEnquiryModalOpen(false);
       setEnquiryMessage('');
     } catch (err) {
-      addToast({ type: 'error', message: 'Failed to send enquiry.' });
+      if (err.message && err.message.includes('limit')) {
+        setEnquiryModalOpen(false);
+        setShowUpgradeModal(true);
+        addToast({ type: 'warning', message: err.message });
+      } else {
+        addToast({ type: 'error', message: 'Failed to send enquiry.' });
+      }
     } finally {
       setSendingEnquiry(false);
     }
@@ -166,6 +258,10 @@ export const PropertyDetailPage = () => {
                     <img
                       src={imgUrl}
                       alt={`${property.title} photo ${idx + 1}`}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                      }}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   </div>
@@ -363,39 +459,103 @@ export const PropertyDetailPage = () => {
             <div className="smartnest-card" style={{ padding: '28px' }}>
               {/* Large 120px MatchScoreBadge */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
-                <MatchScoreBadge score={property.match_score} size={120} showLabel={true} />
+                <MatchScoreBadge
+                  score={property.match_score}
+                  size={120}
+                  showLabel={true}
+                />
               </div>
 
-              {/* AI Explanation Box with teal-light background */}
+              {/* AI Explanation Box: WHY THIS PROPERTY? */}
               <div
                 style={{
-                  padding: '16px',
+                  padding: '16px 18px',
                   backgroundColor: 'var(--teal-light)',
                   borderRadius: 'var(--radius-md)',
-                  marginBottom: '24px',
-                  border: '1px solid rgba(42, 157, 143, 0.2)'
+                  marginBottom: '20px',
+                  border: '1px solid rgba(42, 157, 143, 0.25)'
                 }}
               >
-                <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <Sparkles size={14} /> Your lifestyle match explained
-                </h4>
-                <p style={{ fontSize: '13px', color: 'var(--ink)', lineHeight: 1.5 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <Sparkles size={14} /> Why This Property?
+                  </h4>
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--ink)', lineHeight: 1.55, margin: 0 }}>
                   {property.ai_explanation}
                 </p>
               </div>
 
+              {/* WHAT YOU GAIN & WHAT YOU SACRIFICE */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                {/* What You Gain */}
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    backgroundColor: '#F0FDF4',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid #BBF7D0'
+                  }}
+                >
+                  <h5 style={{ fontSize: '12px', fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    <CheckCircle2 size={14} color="#16A34A" /> What You Gain
+                  </h5>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {(property.what_you_gain || [
+                      "Within preferred budget limit",
+                      "Target BHK family layout",
+                      "Comfortable commute threshold",
+                      "Pedestrian access to park"
+                    ]).map((gain, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#14532D', lineHeight: 1.4 }}>
+                        <span style={{ color: '#16A34A', fontWeight: 700, lineHeight: 1 }}>✓</span>
+                        <span>{gain}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* What You Sacrifice */}
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    backgroundColor: '#FFFBEB',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid #FDE68A'
+                  }}
+                >
+                  <h5 style={{ fontSize: '12px', fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    <AlertTriangle size={14} color="#D97706" /> What You Sacrifice
+                  </h5>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {(property.what_you_sacrifice || [
+                      "Schools require moderate transit",
+                      "Floor layout is moderately compact"
+                    ]).map((sac, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#78350F', lineHeight: 1.4 }}>
+                        <span style={{ color: '#D97706', fontWeight: 700, lineHeight: 1 }}>⚠</span>
+                        <span>{sac}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* ScoreBreakdownBar for each score_breakdown entry */}
               <div style={{ marginBottom: '24px' }}>
-                <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--slate)', marginBottom: '14px' }}>
-                  Score Dimension Breakdown
-                </h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--slate)', margin: 0 }}>
+                    Score Dimension Breakdown
+                  </h4>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {property.score_breakdown && Object.entries(property.score_breakdown).map(([key, obj]) => (
+                  {property.score_breakdown && Object.entries(property.score_breakdown).map(([key, val]) => (
                     <ScoreBreakdownBar
                       key={key}
                       label={key.charAt(0).toUpperCase() + key.slice(1)}
-                      score={obj.score}
-                      max={obj.max}
+                      score={val}
+                      max={100}
+                      isPercentage={true}
                     />
                   ))}
                 </div>
@@ -430,7 +590,7 @@ export const PropertyDetailPage = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button
                   type="button"
-                  onClick={() => setEnquiryModalOpen(true)}
+                  onClick={handleOpenEnquiryModal}
                   className="btn btn-primary"
                   style={{ width: '100%', padding: '12px' }}
                 >
@@ -450,11 +610,18 @@ export const PropertyDetailPage = () => {
 
                   <button
                     type="button"
-                    onClick={() => navigate(`/buyer/compare?ids=${property.property_id}`)}
+                    onClick={() => {
+                      if (property) {
+                        if (!isInCompare(property.property_id)) {
+                          addToCompare(property);
+                        }
+                        navigate('/buyer/compare');
+                      }
+                    }}
                     className="btn btn-secondary"
                     style={{ fontSize: '13px', padding: '10px' }}
                   >
-                    <Scale size={15} /> Compare
+                    <Scale size={15} /> {isInCompare(property?.property_id) ? 'In Compare' : 'Compare'}
                   </button>
                 </div>
 
@@ -504,84 +671,523 @@ export const PropertyDetailPage = () => {
         </div>
       )}
 
-      {/* ── ENQUIRY MODAL ───────────────────────────────────── */}
-      {enquiryModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(13, 27, 42, 0.65)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px'
-          }}
-        >
+      {/* ── UPGRADED VERIFIED SELLER ENQUIRY MODAL (PORTAL) ─────────── */}
+      {enquiryModalOpen &&
+        createPortal(
           <div
-            className="smartnest-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="enquiry-modal-title"
             style={{
-              width: '100%',
-              maxWidth: '480px',
-              padding: '28px',
-              borderRadius: 'var(--radius-modal)',
-              animation: 'fadeUpPage 250ms ease-out'
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100vw',
+              height: '100vh',
+              backgroundColor: 'rgba(13, 27, 42, 0.65)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              boxSizing: 'border-box'
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setEnquiryModalOpen(false);
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>
-                Message Verified Seller
-              </h3>
-              <button
-                onClick={() => setEnquiryModalOpen(false)}
-                style={{ background: 'none', border: 'none', color: 'var(--slate)', cursor: 'pointer' }}
+            <div
+              className="smartnest-card"
+              style={{
+                width: '100%',
+                maxWidth: '720px',
+                height: 'auto',
+                maxHeight: 'calc(100vh - 48px)',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '16px',
+                border: '1px solid var(--border)',
+                boxShadow: '0 25px 50px -12px rgba(13, 27, 42, 0.35)',
+                overflow: 'hidden',
+                padding: 0,
+                boxSizing: 'border-box'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  padding: '20px 24px 16px 24px',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  backgroundColor: '#FFFFFF',
+                  flexShrink: 0
+                }}
               >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p style={{ fontSize: '13px', color: 'var(--slate)', marginBottom: '16px' }}>
-              Inquiring about <strong>{property.title}</strong> ({formatPriceINR(property.price)}).
-            </p>
-
-            <form onSubmit={handleSendEnquiry}>
-              <div style={{ marginBottom: '20px' }}>
-                <label className="smartnest-label" htmlFor="enquiry-text">
-                  Your message to the seller
-                </label>
-                <textarea
-                  id="enquiry-text"
-                  className="smartnest-input"
-                  rows={4}
-                  placeholder="Hi, I'm interested in this property based on my SmartNest match score. Is an on-site visit possible this weekend?"
-                  value={enquiryMessage}
-                  onChange={(e) => setEnquiryMessage(e.target.value)}
-                  style={{ resize: 'vertical' }}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <div>
+                  <h3
+                    id="enquiry-modal-title"
+                    style={{
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: 'var(--ink)',
+                      lineHeight: 1.3,
+                      margin: 0
+                    }}
+                  >
+                    Message Verified Seller
+                  </h3>
+                  <p
+                    style={{
+                      fontSize: '13px',
+                      color: 'var(--slate)',
+                      margin: '4px 0 0 0'
+                    }}
+                  >
+                    You're contacting the verified seller for this property.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setEnquiryModalOpen(false)}
-                  className="btn btn-ghost"
+                  aria-label="Close"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--slate)',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={sendingEnquiry}
-                >
-                  {sendingEnquiry ? 'Sending...' : 'Send Enquiry'}
+                  <X size={20} />
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              {/* Modal Scrollable Body Form */}
+              <form
+                onSubmit={handleSendEnquiry}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflow: 'hidden',
+                  margin: 0
+                }}
+              >
+                <div
+                  ref={modalContentRef}
+                  style={{
+                    flex: '1 1 auto',
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overscrollBehavior: 'contain',
+                    WebkitOverflowScrolling: 'touch',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#CBD5E1 transparent',
+                    padding: '20px 24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '20px'
+                  }}
+                >
+                  {/* 1. Verified Seller Card */}
+                  <div
+                    style={{
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid var(--border)',
+                      borderRadius: '12px',
+                      padding: '18px 20px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                      {/* Seller Initials / Avatar */}
+                      <div
+                        style={{
+                          width: '46px',
+                          height: '46px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, #0D1B2A 0%, #1F3A52 100%)',
+                          color: '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '18px',
+                          flexShrink: 0
+                        }}
+                      >
+                        {seller?.seller_name ? seller.seller_name.charAt(0) : 'S'}
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: '200px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              fontSize: '17px',
+                              fontWeight: 700,
+                              color: 'var(--ink)'
+                            }}
+                          >
+                            {seller?.seller_name || 'Prestige Developers'}
+                          </span>
+                          {seller?.verified && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#166534',
+                                backgroundColor: '#DCFCE7',
+                                padding: '2px 8px',
+                                borderRadius: '9999px',
+                                border: '1px solid #BBF7D0'
+                              }}
+                            >
+                              <CheckCircle2 size={12} /> Verified Seller
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--slate)', marginTop: '2px' }}>
+                          {seller?.seller_type || 'Real Estate Developer'} · {seller?.experience_years || '8+ Years'} in Coimbatore
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3-Column Contact Details Grid */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                        gap: '12px',
+                        marginTop: '14px',
+                        paddingTop: '14px',
+                        borderTop: '1px solid #E2E8F0'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            backgroundColor: 'rgba(42, 157, 143, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--teal)',
+                            flexShrink: 0
+                          }}
+                        >
+                          <Phone size={14} />
+                        </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontSize: '10.5px', color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: 600 }}>
+                            Call / WhatsApp
+                          </div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {seller?.phone || '+91 98765 43210'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            backgroundColor: 'rgba(42, 157, 143, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--teal)',
+                            flexShrink: 0
+                          }}
+                        >
+                          <Mail size={14} />
+                        </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontSize: '10.5px', color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: 600 }}>
+                            Email
+                          </div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {seller?.email || 'sales@developer.in'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div
+                          style={{
+                            width: '30px',
+                            height: '30px',
+                            borderRadius: '6px',
+                            backgroundColor: 'rgba(42, 157, 143, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--teal)',
+                            flexShrink: 0
+                          }}
+                        >
+                          <MapPin size={14} />
+                        </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontSize: '10.5px', color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.4px', fontWeight: 600 }}>
+                            Office Location
+                          </div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {seller?.location || 'Coimbatore'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Credibility Chips */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '14px' }}>
+                      <span
+                        className="badge-pill"
+                        style={{
+                          backgroundColor: '#FEF3C7',
+                          color: '#92400E',
+                          border: '1px solid #FDE68A',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11.5px',
+                          padding: '4px 10px'
+                        }}
+                      >
+                        <Star size={12} fill="#D97706" color="#D97706" /> {seller?.rating || 4.6}/5 · {seller?.review_count || 128} reviews
+                      </span>
+                      <span
+                        className="badge-pill badge-slate"
+                        style={{
+                          fontSize: '11.5px',
+                          padding: '4px 10px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Building2 size={12} /> {seller?.properties_count || '50+'} Properties
+                      </span>
+                      {seller?.rera_registered && (
+                        <span
+                          className="badge-pill badge-teal"
+                          style={{
+                            fontSize: '11.5px',
+                            padding: '4px 10px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <ShieldCheck size={12} /> RERA Registered
+                        </span>
+                      )}
+                      {seller?.trusted_developer && (
+                        <span
+                          className="badge-pill"
+                          style={{
+                            backgroundColor: '#EFF6FF',
+                            color: '#1D4ED8',
+                            border: '1px solid #BFDBFE',
+                            fontSize: '11.5px',
+                            padding: '4px 10px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <CheckCircle2 size={12} /> Trusted Developer
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2. Property Preview Card */}
+                  <div
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid var(--border)',
+                      borderRadius: '12px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px'
+                    }}
+                  >
+                    {property.images?.[0] ? (
+                      <img
+                        src={property.images[0]}
+                        alt={property.title}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                        }}
+                        style={{
+                          width: '72px',
+                          height: '72px',
+                          borderRadius: '8px',
+                          objectFit: 'cover',
+                          flexShrink: 0
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '72px',
+                          height: '72px',
+                          borderRadius: '8px',
+                          backgroundColor: '#F1F5F9',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--slate)',
+                          flexShrink: 0
+                        }}
+                      >
+                        <Building2 size={24} />
+                      </div>
+                    )}
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          color: 'var(--ink)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {property.title}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '12px',
+                          color: 'var(--slate)',
+                          marginTop: '2px'
+                        }}
+                      >
+                        <MapPin size={12} color="var(--teal)" />
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {property.location}, {property.city}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: 'var(--teal)',
+                          marginTop: '4px'
+                        }}
+                      >
+                        {formatPriceINR(property.price)} | {property.bhk} BHK | {property.area_sqft} sq.ft
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Buyer Message Section */}
+                  <div>
+                    <label
+                      className="smartnest-label"
+                      htmlFor="enquiry-text"
+                      style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px', display: 'block' }}
+                    >
+                      Your message to the seller
+                    </label>
+                    <textarea
+                      id="enquiry-text"
+                      className="smartnest-input"
+                      rows={4}
+                      placeholder="Type your message here..."
+                      value={enquiryMessage}
+                      onChange={(e) => setEnquiryMessage(e.target.value)}
+                      style={{ resize: 'vertical', minHeight: '90px' }}
+                      required
+                    />
+                  </div>
+
+                  {/* 4. Trust / Verification Note */}
+                  <div
+                    style={{
+                      backgroundColor: 'rgba(42, 157, 143, 0.06)',
+                      border: '1px solid rgba(42, 157, 143, 0.2)',
+                      borderRadius: '10px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px'
+                    }}
+                  >
+                    <ShieldCheck size={18} color="var(--teal)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ fontSize: '12px', color: 'var(--ink)', lineHeight: 1.5 }}>
+                      <strong>Verified SmartNest Partner:</strong> SmartNest verifies developer credentials, RERA registrations, and contact authenticity before listing. All site visits and price negotiations are conducted directly with the verified developer.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer Actions (Sticky at bottom, flexShrink: 0) */}
+                <div
+                  style={{
+                    padding: '16px 24px',
+                    borderTop: '1px solid var(--border)',
+                    backgroundColor: '#F8FAFC',
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: '12px',
+                    flexShrink: 0
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setEnquiryModalOpen(false)}
+                    className="btn btn-ghost"
+                    style={{ fontSize: '13px' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={sendingEnquiry}
+                    style={{ fontSize: '13px', padding: '10px 20px' }}
+                  >
+                    {sendingEnquiry ? (
+                      'Sending...'
+                    ) : (
+                      <>
+                        <Send size={14} /> Send Enquiry
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* ── LIVE INTERACTIVE MAP MODAL ── */}
       <LiveMapModal
@@ -589,6 +1195,16 @@ export const PropertyDetailPage = () => {
         isOpen={mapModalOpen}
         onClose={() => setMapModalOpen(false)}
         initialCategory={mapCategory}
+      />
+
+      {/* ── UPGRADE SUBSCRIPTION MODAL ── */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        limitType="contacts"
+        currentPlan={subscription?.plan_id || 'buyer_connect'}
+        userRole="buyer"
+        usage={usage}
       />
     </div>
   );

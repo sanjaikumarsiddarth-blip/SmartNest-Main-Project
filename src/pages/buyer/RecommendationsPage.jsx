@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useCompare } from '../../context/CompareContext';
 import { PropertyCard, formatPriceINR } from '../../components/shared/PropertyCard';
 import { SkeletonCard } from '../../components/shared/SkeletonCard';
 import { EmptyState } from '../../components/shared/EmptyState';
@@ -10,10 +11,10 @@ import {
   SlidersHorizontal,
   X,
   Scale,
-  Sparkles,
   ArrowUpDown,
   Filter,
-  Check
+  Check,
+  RotateCcw
 } from 'lucide-react';
 
 export const RecommendationsPage = () => {
@@ -37,7 +38,13 @@ export const RecommendationsPage = () => {
   });
 
   const [savedIds, setSavedIds] = useState([]);
-  const [compareList, setCompareList] = useState([]); // Array of property objects for compare bar
+  const {
+    selectedPropertyIds,
+    selectedProperties,
+    toggleCompare,
+    removeFromCompare,
+    isInCompare
+  } = useCompare();
 
   // Zero business logic in frontend: getRecommendations handles filtering & ranking on backend
   const fetchRecommendations = useCallback(async (currentFilters, currentSort) => {
@@ -87,24 +94,6 @@ export const RecommendationsPage = () => {
     }
   };
 
-  const handleCompareToggle = (propId) => {
-    const isAlready = compareList.some((p) => p.property_id === propId);
-    if (isAlready) {
-      setCompareList((prev) => prev.filter((p) => p.property_id !== propId));
-      addToast({ type: 'info', message: 'Removed from comparison list.' });
-    } else {
-      if (compareList.length >= 3) {
-        addToast({ type: 'warning', message: 'You can compare up to 3 properties.' });
-        return;
-      }
-      const propToAdd = properties.find((p) => p.property_id === propId);
-      if (propToAdd) {
-        setCompareList((prev) => [...prev, propToAdd]);
-        addToast({ type: 'success', message: 'Added to comparison list.' });
-      }
-    }
-  };
-
   const toggleBhkFilter = (bhkVal) => {
     setFilters((prev) => {
       const exists = prev.bhk.includes(bhkVal);
@@ -115,8 +104,25 @@ export const RecommendationsPage = () => {
     });
   };
 
+  const handleResetFilters = () => {
+    const defaultFilters = {
+      max_price: 10000000,
+      bhk: [],
+      noise: 'all',
+      min_green_score: 0,
+      max_commute: 90
+    };
+    setFilters(defaultFilters);
+    setSortBy('match');
+    addToast({ type: 'info', message: 'Filters reset to default.' });
+  };
+
   // Recovery Buttons for Empty State
   const recoveryActions = [
+    {
+      label: "Reset Filters",
+      onClick: handleResetFilters
+    },
     {
       label: "Increase Budget by 10%",
       onClick: () => {
@@ -125,7 +131,7 @@ export const RecommendationsPage = () => {
       }
     },
     {
-      label: "Expand Location",
+      label: "Expand Location / Noise",
       onClick: () => {
         setFilters((prev) => ({ ...prev, noise: 'all' }));
         addToast({ type: 'info', message: 'Relaxed acoustic and neighborhood criteria.' });
@@ -136,19 +142,6 @@ export const RecommendationsPage = () => {
       onClick: () => {
         setFilters((prev) => ({ ...prev, max_commute: Math.min(90, prev.max_commute + 15) }));
         addToast({ type: 'info', message: 'Extended maximum commute threshold.' });
-      }
-    },
-    {
-      label: "Show Closest Matches",
-      onClick: () => {
-        setFilters({
-          max_price: 10000000,
-          bhk: [],
-          noise: 'all',
-          min_green_score: 0,
-          max_commute: 90
-        });
-        addToast({ type: 'info', message: 'Reset all active filters.' });
       }
     }
   ];
@@ -167,7 +160,7 @@ export const RecommendationsPage = () => {
             </p>
           </div>
 
-          {/* Toolbar: Sort + Filter Trigger */}
+          {/* Toolbar: Sort + Reset + Filter Trigger */}
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <ArrowUpDown size={15} color="var(--slate)" style={{ position: 'absolute', left: '12px', pointerEvents: 'none' }} />
@@ -175,7 +168,7 @@ export const RecommendationsPage = () => {
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="smartnest-input"
-                style={{ paddingLeft: '34px', width: '200px', cursor: 'pointer' }}
+                style={{ paddingLeft: '34px', width: '190px', cursor: 'pointer' }}
                 aria-label="Sort properties"
               >
                 <option value="match">Sort: Best Match</option>
@@ -184,6 +177,16 @@ export const RecommendationsPage = () => {
                 <option value="commute">Shortest Commute</option>
               </select>
             </div>
+
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="btn btn-ghost"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', border: '1px solid var(--border)' }}
+              title="Reset filters to default"
+            >
+              <RotateCcw size={15} /> Reset
+            </button>
 
             <button
               type="button"
@@ -214,9 +217,9 @@ export const RecommendationsPage = () => {
                 property={prop}
                 showCompare={true}
                 showSave={true}
-                isComparing={compareList.some((p) => p.property_id === prop.property_id)}
+                isComparing={isInCompare(prop.property_id)}
                 isSaved={savedIds.includes(prop.property_id)}
-                onCompare={handleCompareToggle}
+                onCompare={() => toggleCompare(prop)}
                 onSave={handleSaveToggle}
               />
             ))}
@@ -224,15 +227,17 @@ export const RecommendationsPage = () => {
         ) : (
           <EmptyState
             icon={Filter}
-            heading="No properties match your active criteria"
-            subtext="Your current budget, commute, or layout constraints returned 0 listings. Use the automated recovery options below to broaden your match scope:"
+            heading="No properties match your current preferences"
+            subtext="Your current budget, commute, or layout constraints returned 0 listings. Try adjusting your filters (e.g. increase budget or commute time)."
+            actionText="Reset Filters"
+            onAction={handleResetFilters}
             recoveryButtons={recoveryActions}
           />
         )}
       </div>
 
       {/* ── STICKY BOTTOM COMPARE BAR ───────────────────────── */}
-      {compareList.length > 0 && (
+      {selectedPropertyIds.length > 0 && (
         <div
           style={{
             position: 'fixed',
@@ -254,45 +259,67 @@ export const RecommendationsPage = () => {
         >
           {/* Thumbnails of selected */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {compareList.map((item) => (
-              <div
-                key={item.property_id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                  padding: '4px 10px',
-                  borderRadius: 'var(--radius-pill)'
-                }}
-              >
-                <img
-                  src={item.images?.[0]}
-                  alt={item.title}
-                  style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }}
-                />
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#FFFFFF', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {item.title}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCompareToggle(item.property_id)}
-                  style={{ background: 'none', border: 'none', color: '#CBD5E1', cursor: 'pointer', padding: 0 }}
-                  aria-label="Remove item"
+            {selectedPropertyIds.map((propId) => {
+              const item =
+                selectedProperties.find((p) => p.property_id === propId) ||
+                properties.find((p) => p.property_id === propId) ||
+                { property_id: propId, title: propId };
+              return (
+                <div
+                  key={propId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                    padding: '4px 10px',
+                    borderRadius: 'var(--radius-pill)'
+                  }}
                 >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
+                  {item.images?.[0] && (
+                    <img
+                      src={item.images[0]}
+                      alt={item.title}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                      }}
+                      style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  )}
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#FFFFFF',
+                      maxWidth: '120px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {item.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeFromCompare(propId)}
+                    style={{ background: 'none', border: 'none', color: '#CBD5E1', cursor: 'pointer', padding: 0 }}
+                    aria-label="Remove item"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <span style={{ fontSize: '13px', color: '#94A3B8' }}>
-            {compareList.length}/3 selected
+            {selectedPropertyIds.length}/3 selected
           </span>
 
           <button
             type="button"
-            onClick={() => navigate(`/buyer/compare?ids=${compareList.map((p) => p.property_id).join(',')}`)}
+            onClick={() => navigate(`/buyer/compare?ids=${selectedPropertyIds.join(',')}`)}
             className="btn btn-primary"
             style={{ padding: '8px 20px', fontSize: '13px' }}
           >
@@ -458,16 +485,11 @@ export const RecommendationsPage = () => {
                 className="btn btn-ghost"
                 style={{ flex: 1 }}
                 onClick={() => {
-                  setFilters({
-                    max_price: 10000000,
-                    bhk: [],
-                    noise: 'all',
-                    min_green_score: 0,
-                    max_commute: 90
-                  });
+                  handleResetFilters();
+                  setFilterDrawerOpen(false);
                 }}
               >
-                Reset
+                Reset Filters
               </button>
               <button
                 type="button"

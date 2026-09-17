@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useCompare } from '../../context/CompareContext';
 import { PropertyCard } from '../../components/shared/PropertyCard';
 import { EmptyState } from '../../components/shared/EmptyState';
 import { SkeletonCard } from '../../components/shared/SkeletonCard';
@@ -12,10 +13,10 @@ export const ShortlistPage = () => {
   const { sessionId } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const { selectedPropertyIds, toggleCompare, isInCompare } = useCompare();
 
   const [savedProperties, setSavedProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedForCompare, setSelectedForCompare] = useState([]);
 
   const fetchSaved = async () => {
     setLoading(true);
@@ -37,22 +38,9 @@ export const ShortlistPage = () => {
     try {
       await api.removeSavedProperty(propId, sessionId);
       setSavedProperties((prev) => prev.filter((p) => p.property_id !== propId));
-      setSelectedForCompare((prev) => prev.filter((id) => id !== propId));
       addToast({ type: 'info', message: 'Property removed from shortlist.' });
     } catch (e) {
       addToast({ type: 'error', message: 'Failed to remove property.' });
-    }
-  };
-
-  const handleCompareToggle = (propId) => {
-    if (selectedForCompare.includes(propId)) {
-      setSelectedForCompare((prev) => prev.filter((id) => id !== propId));
-    } else {
-      if (selectedForCompare.length >= 3) {
-        addToast({ type: 'warning', message: 'You can compare up to 3 properties.' });
-        return;
-      }
-      setSelectedForCompare((prev) => [...prev, propId]);
     }
   };
 
@@ -81,9 +69,9 @@ export const ShortlistPage = () => {
                 property={prop}
                 showCompare={true}
                 showSave={true}
-                isComparing={selectedForCompare.includes(prop.property_id)}
+                isComparing={isInCompare(prop.property_id)}
                 isSaved={true}
-                onCompare={handleCompareToggle}
+                onCompare={() => toggleCompare(prop)}
                 onSave={handleRemove}
               />
             ))}
@@ -99,8 +87,8 @@ export const ShortlistPage = () => {
         )}
       </div>
 
-      {/* Sticky Compare Bar when 2+ are selected */}
-      {selectedForCompare.length >= 2 && (
+      {/* Sticky Compare Bar when properties are selected */}
+      {selectedPropertyIds.length > 0 && (
         <div
           style={{
             position: 'fixed',
@@ -120,10 +108,10 @@ export const ShortlistPage = () => {
         >
           <Scale size={16} color="var(--teal)" />
           <span style={{ fontSize: '14px', fontWeight: 600 }}>
-            {selectedForCompare.length} properties selected
+            {selectedPropertyIds.length} properties selected
           </span>
           <button
-            onClick={() => navigate(`/buyer/compare?ids=${selectedForCompare.join(',')}`)}
+            onClick={() => navigate(`/buyer/compare?ids=${selectedPropertyIds.join(',')}`)}
             className="btn btn-primary"
             style={{ padding: '6px 18px', fontSize: '13px' }}
           >

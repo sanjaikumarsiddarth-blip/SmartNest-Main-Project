@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 
-export const ScoreBreakdownBar = ({ label, score, max = 20, icon: Icon }) => {
+export const ScoreBreakdownBar = ({ label, score, max = 100, icon: Icon, isPercentage = true }) => {
+  // If score is an object like { score: 18, max: 20 }, extract it
+  const numScore = typeof score === 'object' && score !== null ? score.score : Number(score) || 0;
+  const numMax = typeof score === 'object' && score !== null ? (score.max || 20) : max;
+
+  const percentage = Math.min(100, Math.max(0, (numScore / numMax) * 100));
   const [fillWidth, setFillWidth] = useState(0);
-  const percentage = Math.min(100, Math.max(0, (score / max) * 100));
 
   useEffect(() => {
     // Animate width from 0 on mount (400ms ease-out)
@@ -12,6 +16,8 @@ export const ScoreBreakdownBar = ({ label, score, max = 20, icon: Icon }) => {
     return () => clearTimeout(timer);
   }, [percentage]);
 
+  const displayPercentage = numMax === 100 || isPercentage;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
@@ -20,7 +26,13 @@ export const ScoreBreakdownBar = ({ label, score, max = 20, icon: Icon }) => {
           {label}
         </span>
         <span style={{ color: 'var(--slate)', fontWeight: 600, fontSize: '12px' }}>
-          {score} <span style={{ color: '#94A3B8', fontWeight: 400 }}>/ {max}</span>
+          {displayPercentage ? (
+            <span style={{ color: 'var(--teal)', fontWeight: 700 }}>{Math.round(percentage)}%</span>
+          ) : (
+            <>
+              {numScore} <span style={{ color: '#94A3B8', fontWeight: 400 }}>/ {numMax}</span>
+            </>
+          )}
         </span>
       </div>
 
@@ -34,9 +46,9 @@ export const ScoreBreakdownBar = ({ label, score, max = 20, icon: Icon }) => {
           overflow: 'hidden'
         }}
         role="progressbar"
-        aria-valuenow={score}
+        aria-valuenow={numScore}
         aria-valuemin={0}
-        aria-valuemax={max}
+        aria-valuemax={numMax}
       >
         <div
           style={{

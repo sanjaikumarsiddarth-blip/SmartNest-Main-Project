@@ -150,8 +150,12 @@ export const AdminPropertiesPage = () => {
                     <td style={{ padding: '14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <img
-                          src={p.images?.[0]}
+                          src={p.images?.[0] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80'}
                           alt={p.title}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                          }}
                           style={{ width: '48px', height: '36px', borderRadius: '6px', objectFit: 'cover' }}
                         />
                         <div>

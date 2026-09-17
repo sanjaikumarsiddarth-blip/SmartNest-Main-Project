@@ -2,9 +2,13 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { CompareProvider } from './context/CompareContext';
+import { MessagingProvider } from './context/MessagingContext';
+import { SubscriptionProvider } from './context/SubscriptionContext';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { ScrollToTop } from './components/layout/ScrollToTop';
 
 // Public Pages
 import { LandingPage } from './pages/public/LandingPage';
@@ -22,6 +26,8 @@ import { ComparisonPage } from './pages/buyer/ComparisonPage';
 import { ShortlistPage } from './pages/buyer/ShortlistPage';
 import { SearchHistoryPage } from './pages/buyer/SearchHistoryPage';
 import { AiSearchPage } from './pages/buyer/AiSearchPage';
+import { MessageBoxPage } from './pages/buyer/MessageBoxPage';
+import { BuyerPlansPage } from './pages/buyer/BuyerPlansPage';
 
 // Seller Pages
 import { SellerDashboard } from './pages/seller/SellerDashboard';
@@ -30,6 +36,8 @@ import { AddEditPropertyPage } from './pages/seller/AddEditPropertyPage';
 import { BuyerInsightsPage } from './pages/seller/BuyerInsightsPage';
 import { SellerAnalyticsPage } from './pages/seller/SellerAnalyticsPage';
 import { SellerEnquiriesPage } from './pages/seller/SellerEnquiriesPage';
+import { SellerProfilePage } from './pages/seller/SellerProfilePage';
+import { SellerPlansPage } from './pages/seller/SellerPlansPage';
 
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -43,59 +51,74 @@ import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AuthProvider>
         <ToastProvider>
-          <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-            <Navbar />
-            <main style={{ flex: 1 }}>
-              <Routes>
-                {/* ── PUBLIC ROUTES ────────────────────────────── */}
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/access-denied" element={<AccessDenied />} />
+          <CompareProvider>
+            <MessagingProvider>
+              <SubscriptionProvider>
+                <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+                  <Navbar />
+                  <main style={{ flex: 1 }}>
+                    <Routes>
+                      {/* ── PUBLIC ROUTES ────────────────────────────── */}
+                      <Route path="/" element={<LandingPage />} />
+                      <Route path="/login" element={<LoginPage />} />
+                      <Route path="/seller/login" element={<LoginPage initialRole="seller" />} />
+                      <Route path="/register" element={<RegisterPage />} />
+                      <Route path="/access-denied" element={<AccessDenied />} />
 
-                {/* ── BUYER PROTECTED ROUTES ──────────────────── */}
-                <Route element={<ProtectedRoute allowedRole="buyer" />}>
-                  <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
-                  <Route path="/buyer/quiz" element={<LifestyleQuiz />} />
-                  <Route path="/buyer/profile" element={<BuyerProfile />} />
-                  <Route path="/buyer/recommendations" element={<RecommendationsPage />} />
-                  <Route path="/buyer/property/:id" element={<PropertyDetailPage />} />
-                  <Route path="/buyer/compare" element={<ComparisonPage />} />
-                  <Route path="/buyer/shortlist" element={<ShortlistPage />} />
-                  <Route path="/buyer/history" element={<SearchHistoryPage />} />
-                  <Route path="/buyer/ai-search" element={<AiSearchPage />} />
-                </Route>
+                      {/* ── BUYER PROTECTED ROUTES ──────────────────── */}
+                      <Route element={<ProtectedRoute allowedRole="buyer" />}>
+                        <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
+                        <Route path="/buyer/quiz" element={<LifestyleQuiz />} />
+                        <Route path="/buyer/profile" element={<BuyerProfile />} />
+                        <Route path="/buyer/recommendations" element={<RecommendationsPage />} />
+                        <Route path="/buyer/property/:id" element={<PropertyDetailPage />} />
+                        <Route path="/buyer/compare" element={<ComparisonPage />} />
+                        <Route path="/buyer/shortlist" element={<ShortlistPage />} />
+                        <Route path="/buyer/messages" element={<MessageBoxPage />} />
+                        <Route path="/buyer/plans" element={<BuyerPlansPage />} />
+                        <Route path="/buyer/subscription" element={<BuyerPlansPage defaultTab="manage" />} />
+                        <Route path="/buyer/history" element={<SearchHistoryPage />} />
+                        <Route path="/buyer/ai-search" element={<AiSearchPage />} />
+                      </Route>
 
-                {/* ── SELLER PROTECTED ROUTES ─────────────────── */}
-                <Route element={<ProtectedRoute allowedRole="seller" />}>
-                  <Route path="/seller/dashboard" element={<SellerDashboard />} />
-                  <Route path="/seller/properties" element={<SellerPropertiesPage />} />
-                  <Route path="/seller/add" element={<AddEditPropertyPage />} />
-                  <Route path="/seller/edit/:id" element={<AddEditPropertyPage />} />
-                  <Route path="/seller/insights/:id" element={<BuyerInsightsPage />} />
-                  <Route path="/seller/analytics" element={<SellerAnalyticsPage />} />
-                  <Route path="/seller/enquiries" element={<SellerEnquiriesPage />} />
-                </Route>
+                      {/* ── SELLER PROTECTED ROUTES ─────────────────── */}
+                      <Route element={<ProtectedRoute allowedRole="seller" />}>
+                        <Route path="/seller/dashboard" element={<SellerDashboard />} />
+                        <Route path="/seller/properties" element={<SellerPropertiesPage />} />
+                        <Route path="/seller/profile" element={<SellerProfilePage />} />
+                        <Route path="/seller/add" element={<AddEditPropertyPage />} />
+                        <Route path="/seller/edit/:id" element={<AddEditPropertyPage />} />
+                        <Route path="/seller/insights/:id" element={<BuyerInsightsPage />} />
+                        <Route path="/seller/analytics" element={<SellerAnalyticsPage />} />
+                        <Route path="/seller/enquiries" element={<SellerEnquiriesPage />} />
+                        <Route path="/seller/plans" element={<SellerPlansPage />} />
+                        <Route path="/seller/subscription" element={<SellerPlansPage defaultTab="manage" />} />
+                      </Route>
 
-                {/* ── ADMIN PROTECTED ROUTES ──────────────────── */}
-                <Route element={<ProtectedRoute allowedRole="admin" />}>
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                  <Route path="/admin/users" element={<AdminUsersPage />} />
-                  <Route path="/admin/sellers" element={<AdminSellersPage />} />
-                  <Route path="/admin/properties" element={<AdminPropertiesPage />} />
-                  <Route path="/admin/reports" element={<AdminReportsPage />} />
-                  <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
-                  <Route path="/admin/settings" element={<AdminSettingsPage />} />
-                </Route>
+                      {/* ── ADMIN PROTECTED ROUTES ──────────────────── */}
+                      <Route element={<ProtectedRoute allowedRole="admin" />}>
+                        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+                        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                        <Route path="/admin/users" element={<AdminUsersPage />} />
+                        <Route path="/admin/sellers" element={<AdminSellersPage />} />
+                        <Route path="/admin/properties" element={<AdminPropertiesPage />} />
+                        <Route path="/admin/reports" element={<AdminReportsPage />} />
+                        <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+                        <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                      </Route>
 
-                {/* Fallback to Home */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </main>
-            <Footer />
-          </div>
+                      {/* Fallback to Home */}
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </main>
+                  <Footer />
+                </div>
+              </SubscriptionProvider>
+            </MessagingProvider>
+          </CompareProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

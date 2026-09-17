@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useCompare } from '../../context/CompareContext';
 import { MatchScoreBadge } from '../../components/shared/MatchScoreBadge';
 import { formatPriceINR } from '../../components/shared/PropertyCard';
 import { EmptyState } from '../../components/shared/EmptyState';
@@ -13,7 +14,10 @@ import {
   Sparkles,
   Check,
   Building,
-  Plus
+  Plus,
+  CheckCircle2,
+  AlertCircle,
+  Award
 } from 'lucide-react';
 
 export const ComparisonPage = () => {
@@ -21,26 +25,60 @@ export const ComparisonPage = () => {
   const navigate = useNavigate();
   const { sessionId } = useAuth();
   const { addToast } = useToast();
+  const { selectedPropertyIds, removeFromCompare, setCompareIds } = useCompare();
 
   const [properties, setProperties] = useState([]);
   const [summary, setSummary] = useState('');
+  const [aiComparison, setAiComparison] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savedIds, setSavedIds] = useState([]);
 
-  // Read IDs from query param or fallback to default P01 & P02
+  // URL query parameter synchronization
   const idsParam = searchParams.get('ids');
-  const selectedIds = idsParam ? idsParam.split(',').filter(Boolean) : ['P01', 'P02', 'P04'];
+  const hasInitializedFromUrl = React.useRef(false);
 
+  // If page was directly opened with ?ids=... (e.g. shared link or bookmark) and context is empty, initialize from URL once
   useEffect(() => {
+    if (!hasInitializedFromUrl.current) {
+      hasInitializedFromUrl.current = true;
+      if (idsParam) {
+        const urlIds = idsParam.split(',').filter(Boolean).slice(0, 3);
+        if (urlIds.length > 0) {
+          setCompareIds(urlIds);
+        }
+      }
+    }
+  }, [idsParam, setCompareIds]);
+
+  // Keep URL query string in sync with shared selectedPropertyIds
+  useEffect(() => {
+    if (selectedPropertyIds.length > 0) {
+      setSearchParams({ ids: selectedPropertyIds.join(',') }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [selectedPropertyIds, setSearchParams]);
+
+  // Fetch comparison properties based on the shared selectedPropertyIds
+  useEffect(() => {
+    if (selectedPropertyIds.length === 0) {
+      setProperties([]);
+      setSummary('');
+      setAiComparison(null);
+      setLoading(false);
+      return;
+    }
+
     const fetchComparison = async () => {
       setLoading(true);
       try {
-        const res = await api.compareProperties(selectedIds);
-        setProperties(res.properties);
-        setSummary(res.ai_comparison_summary);
+        const res = await api.compareProperties(selectedPropertyIds);
+        setProperties(res.properties || []);
+        setSummary(res.ai_comparison_summary || '');
+        setAiComparison(res.ai_comparison || null);
 
         const saved = await api.getSavedProperties(sessionId);
-        setSavedIds(saved.properties.map((p) => p.property_id));
+        setSavedIds((saved.properties || []).map((p) => p.property_id));
       } catch (err) {
         addToast({ type: 'error', message: 'Failed to generate comparison table.' });
       } finally {
@@ -49,11 +87,10 @@ export const ComparisonPage = () => {
     };
 
     fetchComparison();
-  }, [idsParam, sessionId, addToast]);
+  }, [selectedPropertyIds, sessionId, addToast]);
 
   const handleRemove = (propId) => {
-    const remaining = selectedIds.filter((id) => id !== propId);
-    setSearchParams({ ids: remaining.join(',') });
+    removeFromCompare(propId);
   };
 
   const handleSaveToggle = async (propId) => {
@@ -85,9 +122,9 @@ export const ComparisonPage = () => {
       <div className="container-main" style={{ padding: '80px 0' }}>
         <EmptyState
           icon={Scale}
-          heading="No properties to compare"
-          subtext="Select 2 or 3 properties from your recommended matches to evaluate their lifestyle factors side-by-side."
-          actionText="Browse Matches"
+          heading="Compare properties"
+          subtext="Select up to 3 properties from your matches to compare them side by side."
+          actionText="Explore Matches"
           onAction={() => navigate('/buyer/recommendations')}
         />
       </div>
@@ -189,8 +226,12 @@ export const ComparisonPage = () => {
                       </button>
 
                       <img
-                        src={p.images?.[0]}
+                        src={p.images?.[0] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80'}
                         alt={p.title}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                        }}
                         style={{ width: '100%', height: '120px', borderRadius: '12px', objectFit: 'cover' }}
                       />
 
@@ -381,9 +422,21 @@ export const ComparisonPage = () => {
                 </td>
                 {properties.map((p) => {
                   const isBest = p.match_score === maxMatch;
+                  const isWinner = aiComparison?.winner_property_id === p.property_id;
                   return (
                     <td key={p.property_id} style={{ padding: '14px 16px', textAlign: 'center', backgroundColor: isBest ? 'var(--teal-light)' : 'transparent' }}>
-                      <MatchScoreBadge score={p.match_score} size={54} showLabel={true} />
+                      <MatchScoreBadge
+                        score={p.match_score}
+                        size={54}
+                        showLabel={true}
+                      />
+                      {isWinner && (
+                        <div style={{ marginTop: '6px' }}>
+                          <span className="badge-pill badge-teal" style={{ fontSize: '10px', padding: '2px 8px', fontWeight: 700 }}>
+                            ★ Recommended
+                          </span>
+                        </div>
+                      )}
                     </td>
                   );
                 })}
@@ -392,25 +445,121 @@ export const ComparisonPage = () => {
           </table>
         </div>
 
-        {/* ── AI COMPARISON SUMMARY CARD ──────────────────────── */}
-        <div
-          className="smartnest-card"
-          style={{
-            padding: '28px',
-            backgroundColor: 'var(--teal-light)',
-            border: '1.5px solid var(--teal)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <Sparkles size={20} color="var(--teal)" />
-            <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--ink)' }}>
-              AI Comparison Synthesis
-            </h3>
+        {/* ── AI COMPARISON INTELLIGENCE CARD (When 2 or 3 properties selected) ── */}
+        {properties.length >= 2 ? (
+          <div
+            className="smartnest-card"
+            style={{
+              padding: '28px',
+              backgroundColor: '#FFFFFF',
+              border: '1.5px solid var(--teal)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Sparkles size={22} color="var(--teal)" />
+                <div>
+                  <span className="badge-pill badge-teal" style={{ marginBottom: '4px', display: 'inline-block' }}>
+                    AI Comparison Intelligence
+                  </span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)', margin: 0 }}>
+                    {aiComparison?.winner_property_title
+                      ? `Recommended Choice: ${aiComparison.winner_property_title}`
+                      : 'Multi-Property Decision Synthesis'}
+                  </h3>
+                </div>
+              </div>
+
+              {aiComparison?.compatibility_difference && (
+                <span className="badge-pill badge-teal" style={{ fontSize: '12px', padding: '4px 12px', fontWeight: 700 }}>
+                  {aiComparison.compatibility_difference}
+                </span>
+              )}
+            </div>
+
+            {/* Rationale & Trade-offs 2-column layout */}
+            {aiComparison && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                {/* Why Recommended */}
+                <div style={{ padding: '16px', backgroundColor: '#F0FDF4', borderRadius: 'var(--radius-md)', border: '1px solid #BBF7D0' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#166534', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    <CheckCircle2 size={15} color="#16A34A" /> Why This Property Leads
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {aiComparison.reasons?.map((reason, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', color: '#14532D' }}>
+                        <span style={{ color: '#16A34A', fontWeight: 700 }}>✓</span>
+                        <span>{reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Trade-offs */}
+                <div style={{ padding: '16px', backgroundColor: '#FFFBEB', borderRadius: 'var(--radius-md)', border: '1px solid #FDE68A' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    <AlertCircle size={15} color="#D97706" /> Key Trade-offs
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {aiComparison.tradeoffs?.map((tradeoff, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', color: '#78350F' }}>
+                        <span style={{ color: '#D97706', fontWeight: 700 }}>⚠</span>
+                        <span>{tradeoff}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Narrative Synthesis */}
+            <div style={{ padding: '16px', backgroundColor: 'var(--teal-light)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(42, 157, 143, 0.2)' }}>
+              <h4 style={{ fontSize: '12px', fontWeight: 700, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                Concise Recommendation Summary
+              </h4>
+              <p style={{ fontSize: '14px', color: 'var(--ink)', lineHeight: 1.6, margin: 0 }}>
+                {summary}
+              </p>
+            </div>
           </div>
-          <p style={{ fontSize: '15px', color: 'var(--ink)', lineHeight: 1.6 }}>
-            {summary}
-          </p>
-        </div>
+        ) : (
+          <div
+            className="smartnest-card"
+            style={{
+              padding: '24px',
+              backgroundColor: '#FFFFFF',
+              border: '1px dashed var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Scale size={20} color="var(--teal)" />
+              <div>
+                <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
+                  Add at least one more property to compare
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--slate)', margin: '4px 0 0 0' }}>
+                  Select 2 or 3 properties to unlock automated AI trade-off evaluations and winner recommendations.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/buyer/recommendations')}
+              className="btn btn-secondary"
+              style={{ fontSize: '13px' }}
+            >
+              Add Properties
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

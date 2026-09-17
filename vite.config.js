@@ -6,6 +6,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      '/api/sns-webhook': {
+        target: 'https://api.agents.snsihub.ai',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/sns-webhook/, '')
+      }
+    }
   }
 });

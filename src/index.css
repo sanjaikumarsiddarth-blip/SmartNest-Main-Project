@@ -192,10 +192,10 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 18px;
+  padding: 7px 14px;
   border-radius: var(--radius-md);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--slate);
   background-color: transparent;
@@ -203,6 +203,7 @@ textarea:focus-visible {
   transition: all 220ms cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
   box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .nav-link-interactive svg {
@@ -405,12 +406,51 @@ textarea:focus-visible {
   padding: 0 24px;
 }
 
+.desktop-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex: 1;
+}
+
+.desktop-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.desktop-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1120px) and (min-width: 769px) {
+  .desktop-nav-group {
+    gap: 16px;
+  }
+  .desktop-nav-links {
+    gap: 4px;
+  }
+  .nav-link-interactive {
+    padding: 6px 10px !important;
+    font-size: 12.5px !important;
+    gap: 4px !important;
+  }
+}
+
 @media (max-width: 768px) {
   .container-main {
     padding: 0 16px;
   }
 
-  .desktop-nav {
+  .desktop-nav,
+  .desktop-nav-group,
+  .desktop-nav-links,
+  .desktop-nav-actions {
     display: none !important;
   }
 
