@@ -70,7 +70,7 @@ export async function initiatePayment({
     try {
       onProcessing();
       const res = await api.createSubscription({
-        userId: user.user_id,
+        userId: user.user_id || user.id,
         role,
         planId: plan.id
       });
@@ -88,20 +88,99 @@ export async function initiatePayment({
 
   const isDemo = getDemoMode();
 
-  // If Live Mode: Use internal SmartNest subscription activation (No external payment gateways)
+  // If Live Mode
   if (!isDemo) {
+    const keyId = import.meta.env?.VITE_RAZORPAY_KEY_ID;
+    if (!keyId) {
+      console.info('Live Mode: VITE_RAZORPAY_KEY_ID not configured; activating plan directly through SNS Subscription Webhook...');
+      try {
+        onProcessing();
+        const res = await api.createSubscription({
+          userId: user.user_id || user.id,
+          role,
+          planId: plan.id,
+          paymentMethod: 'SNS Live Subscription Workflow'
+        });
+        onSuccess({
+          plan,
+          subscription: res.subscription || res,
+          isLiveWorkflow: true,
+          message: `Your ${plan.name} subscription is now active.`
+        });
+        return;
+      } catch (err) {
+        onFailure(err);
+        return;
+      }
+    }
+
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded || !window.Razorpay) {
+      onFailure(new Error('Failed to initialize Razorpay payment gateway. Please check your internet connection.'));
+      return;
+    }
+
     try {
       onProcessing();
-      const res = await api.activateSubscription({
-        plan,
-        user,
-        role
+      // Call backend to create checkout session
+      const session = await api.createSubscriptionCheckout({
+        userId: user.user_id,
+        role,
+        planId: plan.id
       });
-      onSuccess({
-        plan,
-        subscription: res.subscription,
-        message: `${plan.name} plan activated successfully.`
+
+      const options = {
+        key: keyId,
+        subscription_id: session.subscription_id || session.provider_subscription_id,
+        name: 'SmartNest AI',
+        description: `${plan.name} Subscription (${plan.billing_period_text})`,
+        image: '/smartnest-logo.svg',
+        handler: async function (response) {
+          onProcessing();
+          try {
+            const verifyRes = await api.verifyPayment({
+              payment_id: response.razorpay_payment_id,
+              subscription_id: response.razorpay_subscription_id || session.provider_subscription_id,
+              signature: response.razorpay_signature,
+              userId: user.user_id,
+              role,
+              planId: plan.id
+            });
+
+            if (verifyRes.verified) {
+              onSuccess({
+                plan,
+                subscription: verifyRes.subscription,
+                transaction: verifyRes.transaction,
+                invoice: verifyRes.invoice
+              });
+            } else {
+              onFailure(new Error(verifyRes.error || 'Payment verification failed.'));
+            }
+          } catch (verifyErr) {
+            onFailure(verifyErr);
+          }
+        },
+        prefill: {
+          name: user.name || '',
+          email: user.email || '',
+          contact: user.phone || ''
+        },
+        theme: {
+          color: '#2A9D8F'
+        },
+        modal: {
+          ondismiss: function () {
+            onCancel();
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        onFailure(new Error(resp.error?.description || 'Payment transaction failed.'));
       });
+      rzp.open();
     } catch (err) {
       onFailure(err);
     }

@@ -10,7 +10,6 @@ import { SmartNestBrand } from '../../components/shared/SmartNestBrand';
 import { PlanConfirmationModal } from '../../components/subscription/PlanConfirmationModal';
 import { DemoCheckoutModal } from '../../components/subscription/DemoCheckoutModal';
 import { PaymentStatusModal } from '../../components/subscription/PaymentStatusModal';
-import { InvoiceModal } from '../../components/subscription/InvoiceModal';
 import { ConfirmModal } from '../../components/shared/ConfirmModal';
 import {
   Sparkles,
@@ -48,10 +47,8 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-  // Payment History & Invoices
-  const [paymentHistory, setPaymentHistory] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  // Subscription History
+  const [subscriptionHistory, setSubscriptionHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const activePlanId = subscription?.plan_id || 'free';
@@ -59,26 +56,22 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
   const contactLimit = usage?.contact_limit || 1;
   const usagePct = Math.min(100, Math.round((contactsUsed / contactLimit) * 100));
 
-  // Load payment history and invoices
-  const loadHistoryAndInvoices = async () => {
+  // Load subscription history
+  const loadSubscriptionHistory = async () => {
     if (!user) return;
     setLoadingHistory(true);
     try {
-      const [historyData, invoicesData] = await Promise.all([
-        api.getPaymentHistory(user.user_id, 'buyer'),
-        api.getInvoices(user.user_id, 'buyer')
-      ]);
-      setPaymentHistory(historyData || []);
-      setInvoices(invoicesData || []);
+      const historyData = await api.getSubscriptionHistory(user.user_id || user.id, 'buyer');
+      setSubscriptionHistory(historyData || []);
     } catch (err) {
-      console.error('Error fetching billing history:', err);
+      console.error('Error fetching subscription history:', err);
     } finally {
       setLoadingHistory(false);
     }
   };
 
   useEffect(() => {
-    loadHistoryAndInvoices();
+    loadSubscriptionHistory();
   }, [user]);
 
   useEffect(() => {
@@ -99,12 +92,12 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
     setSelectedPlanForConfirmation(null);
     setActivePaymentPlan(plan);
 
-    // Free plan: Instant activation without opening Razorpay
+    // Free plan: Instant activation without opening payment gateway
     if (plan.price === 0) {
       setPaymentStatus('processing');
       try {
-        await api.createSubscription({
-          userId: user?.user_id || 'usr_buyer_01',
+        await api.activateSubscription({
+          userId: user?.user_id || user?.id,
           role: 'buyer',
           planId: 'free'
         });
@@ -114,7 +107,7 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
           message: 'Free plan activated successfully. 1 verified owner contact enabled.'
         });
         await refresh();
-        await loadHistoryAndInvoices();
+        await loadSubscriptionHistory();
       } catch (err) {
         setPaymentError(err.message || 'Failed to activate Free plan.');
         setPaymentStatus('failed');
@@ -128,20 +121,20 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
       // Open Demo Payment Gateway modal
       setDemoCheckoutPlan(plan);
     } else {
-      // Live Mode: Direct internal SmartNest plan activation
+      // Live Mode: Direct internal subscription activation via SNS webhook
       setPaymentStatus('processing');
       try {
         await api.activateSubscription({
-          plan,
-          user,
-          role: 'buyer'
+          userId: user?.user_id || user?.id,
+          role: 'buyer',
+          planId: plan.id
         });
         setPaymentStatus('success');
         addToast({ type: 'success', message: `Your ${plan.name} subscription is now active.` });
         await refresh();
-        await loadHistoryAndInvoices();
+        await loadSubscriptionHistory();
       } catch (err) {
-        setPaymentError(err.message || 'Subscription activation failed.');
+        setPaymentError(err.message || 'Failed to activate subscription.');
         setPaymentStatus('failed');
       }
     }
@@ -183,7 +176,7 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
           message: `Your ${plan.name} subscription is now active.`
         });
         await refresh();
-        await loadHistoryAndInvoices();
+        await loadSubscriptionHistory();
       } else {
         setPaymentError('Signature verification failed.');
         setPaymentStatus('verification_failed');
@@ -219,7 +212,7 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
       type: 'error',
       message: `Your ${plan.name} payment failed.`
     });
-    await loadHistoryAndInvoices();
+    await loadSubscriptionHistory();
   };
 
   // Cancel Subscription flow
@@ -595,7 +588,7 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
               </div>
             </div>
 
-            {/* Payment History & Invoices Table */}
+            {/* Subscription History Table */}
             <div
               className="smartnest-card"
               style={{
@@ -608,17 +601,17 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div>
                   <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--ink)', margin: '0 0 4px 0' }}>
-                    Payment History & Invoices
+                    Subscription History
                   </h3>
                   <p style={{ fontSize: '13px', color: 'var(--slate)', margin: 0 }}>
-                    Official tax receipts and verification records for your SmartNest transactions.
+                    Your SmartNest plan activation history.
                   </p>
                 </div>
               </div>
 
-              {paymentHistory.length === 0 ? (
+              {subscriptionHistory.length === 0 ? (
                 <div style={{ padding: '30px', textAlign: 'center', color: 'var(--slate)', fontSize: '14px' }}>
-                  No payment records found.
+                  No subscription records found.
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
@@ -629,73 +622,34 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
                         <th style={{ padding: '12px 10px' }}>Plan</th>
                         <th style={{ padding: '12px 10px' }}>Amount</th>
                         <th style={{ padding: '12px 10px' }}>Status</th>
-                        <th style={{ padding: '12px 10px' }}>Payment ID</th>
-                        <th style={{ padding: '12px 10px', textAlign: 'right' }}>Invoice</th>
+                        <th style={{ padding: '12px 10px' }}>Activation ID</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {paymentHistory.map((tx, idx) => {
-                        const inv = invoices.find((i) => i.payment_id === tx.payment_id) || {
-                          invoice_id: `INV-202609-${1001 + idx}`,
-                          payment_id: tx.payment_id,
-                          subscription_id: tx.subscription_id,
-                          user_id: tx.user_id,
-                          customer_name: tx.user_name || user?.name || 'SmartNest Member',
-                          customer_email: user?.email || 'buyer@smartnest.ai',
-                          plan_name: tx.plan_name,
-                          role: 'buyer',
-                          amount: tx.amount,
-                          base_amount: Math.round((tx.amount / 1.18) * 100) / 100,
-                          cgst_9_pct: Math.round((tx.amount * 0.09) * 100) / 100,
-                          sgst_9_pct: Math.round((tx.amount * 0.09) * 100) / 100,
-                          status: 'PAID',
-                          payment_method: tx.payment_method,
-                          issued_date: tx.created_at
-                        };
-
-                        const maskedPaymentId = tx.payment_id
-                          ? tx.payment_id.length > 12
-                            ? `${tx.payment_id.slice(0, 7)}...${tx.payment_id.slice(-4)}`
-                            : tx.payment_id
-                          : 'N/A';
-
-                        return (
-                          <tr key={tx.payment_id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '12px 10px', color: 'var(--ink)' }}>
-                              {new Date(tx.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--ink)' }}>
-                              {tx.plan_name}
-                            </td>
-                            <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--teal)' }}>
-                              {formatCurrency(tx.amount)}
-                            </td>
-                            <td style={{ padding: '12px 10px' }}>
-                              <span
-                                className={`badge-pill ${tx.status === 'successful' ? 'badge-teal' : 'badge-rose'}`}
-                                style={{ fontSize: '11px', textTransform: 'capitalize' }}
-                              >
-                                {tx.status === 'successful' ? 'Paid' : tx.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px 10px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--slate)' }}>
-                              {maskedPaymentId}
-                            </td>
-                            <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                              {tx.status === 'successful' && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedInvoice(inv)}
-                                  className="btn btn-ghost"
-                                  style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                >
-                                  <FileText size={13} /> View Invoice
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {subscriptionHistory.map((item, idx) => (
+                        <tr key={item.id || item.subscription_id || idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '12px 10px', color: 'var(--ink)' }}>
+                            {item.created_at ? new Date(item.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '17 Sep 2026'}
+                          </td>
+                          <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--ink)' }}>
+                            {item.plan_name}
+                          </td>
+                          <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--teal)' }}>
+                            {formatCurrency(item.amount)}
+                          </td>
+                          <td style={{ padding: '12px 10px' }}>
+                            <span
+                              className="badge-pill badge-teal"
+                              style={{ fontSize: '11px', textTransform: 'capitalize' }}
+                            >
+                              {item.status || 'Active'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 10px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--slate)' }}>
+                            {item.subscription_id || item.id || 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -744,14 +698,7 @@ export const BuyerPlansPage = ({ defaultTab = 'plans' }) => {
         }}
       />
 
-      {/* 4. Tax Invoice Modal */}
-      <InvoiceModal
-        isOpen={Boolean(selectedInvoice)}
-        invoice={selectedInvoice}
-        onClose={() => setSelectedInvoice(null)}
-      />
-
-      {/* 5. Cancellation Confirmation Modal */}
+      {/* 4. Cancellation Confirmation Modal */}
       <ConfirmModal
         isOpen={showCancelModal}
         title="Cancel Your Subscription?"

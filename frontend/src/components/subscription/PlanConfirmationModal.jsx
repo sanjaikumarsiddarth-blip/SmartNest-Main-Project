@@ -158,7 +158,7 @@ export const PlanConfirmationModal = ({
           <span>
             {isFree
               ? 'Zero billing. Immediate instant activation with no card required.'
-              : 'Immediate plan activation. Zero payment or card details required.'}
+              : '256-bit encrypted checkout. Automatic renewal with cancel anytime policy.'}
           </span>
         </div>
 
@@ -192,7 +192,7 @@ export const PlanConfirmationModal = ({
               </>
             ) : (
               <>
-                Activate Subscription <ArrowRight size={16} />
+                Proceed to Payment <ArrowRight size={16} />
               </>
             )}
           </button>

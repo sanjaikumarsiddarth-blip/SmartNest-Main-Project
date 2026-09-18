@@ -41,14 +41,15 @@ export const SellerDashboard = () => {
     const fetchSellerData = async () => {
       setLoading(true);
       try {
+        const sellerId = user?.user_id || user?.id;
         const [props, stats, enqs] = await Promise.all([
-          api.getSellerProperties(user?.user_id),
-          api.getSellerAnalytics(user?.user_id),
-          api.getEnquiries(user?.user_id)
+          api.getSellerProperties(sellerId),
+          api.getSellerAnalytics(sellerId),
+          api.getEnquiries(sellerId)
         ]);
-        setProperties(props);
-        setAnalytics(stats);
-        setEnquiries(enqs.slice(0, 3));
+        setProperties(props || []);
+        setAnalytics(stats || null);
+        setEnquiries((enqs || []).slice(0, 3));
       } catch (err) {
         console.error('Failed to load seller dashboard data', err);
       } finally {
@@ -59,7 +60,11 @@ export const SellerDashboard = () => {
     fetchSellerData();
     const handleUpdated = () => fetchSellerData();
     window.addEventListener('smartnest_properties_updated', handleUpdated);
-    return () => window.removeEventListener('smartnest_properties_updated', handleUpdated);
+    window.addEventListener('smartnest_message_sent', handleUpdated);
+    return () => {
+      window.removeEventListener('smartnest_properties_updated', handleUpdated);
+      window.removeEventListener('smartnest_message_sent', handleUpdated);
+    };
   }, [user]);
 
   const activeCount = properties.filter((p) => p.status === 'active').length;
@@ -308,8 +313,12 @@ export const SellerDashboard = () => {
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <img
-                          src={prop.images?.[0]}
+                          src={prop.images?.[0] || 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80'}
                           alt={prop.title}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80';
+                          }}
                           style={{ width: '48px', height: '36px', borderRadius: '6px', objectFit: 'cover' }}
                         />
                         <div>
@@ -390,55 +399,61 @@ export const SellerDashboard = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {enquiries.map((enq) => (
-              <div
-                key={enq.enquiry_id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '16px',
-                  backgroundColor: 'var(--mist)',
-                  borderRadius: 'var(--radius-md)'
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
-                      {enq.buyer_name}
-                    </span>
-                    <span style={{ fontSize: '12px', color: 'var(--slate)' }}>
-                      on <em>{enq.property_title}</em>
-                    </span>
-                  </div>
-                  <p style={{ fontSize: '13px', color: 'var(--slate)', maxWidth: '640px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    "{enq.message}"
-                  </p>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span
-                    className={`badge-pill ${
-                      enq.status === 'new'
-                        ? 'badge-rose'
-                        : enq.status === 'responded'
-                        ? 'badge-teal'
-                        : 'badge-slate'
-                    }`}
-                    style={{ textTransform: 'capitalize' }}
-                  >
-                    {enq.status}
-                  </span>
-                  <Link
-                    to="/seller/enquiries"
-                    className="btn btn-secondary"
-                    style={{ padding: '6px 12px', fontSize: '12px' }}
-                  >
-                    Respond
-                  </Link>
-                </div>
+            {enquiries.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--slate)', fontSize: '14px' }}>
+                No buyer enquiries received yet.
               </div>
-            ))}
+            ) : (
+              enquiries.map((enq) => (
+                <div
+                  key={enq.enquiry_id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '16px',
+                    backgroundColor: 'var(--mist)',
+                    borderRadius: 'var(--radius-md)'
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
+                        {enq.buyer_name}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--slate)' }}>
+                        on <em>{enq.property_title}</em>
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--slate)', maxWidth: '640px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      "{enq.message}"
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span
+                      className={`badge-pill ${
+                        enq.status === 'new'
+                          ? 'badge-rose'
+                          : enq.status === 'responded'
+                          ? 'badge-teal'
+                          : 'badge-slate'
+                      }`}
+                      style={{ textTransform: 'capitalize' }}
+                    >
+                      {enq.status}
+                    </span>
+                    <Link
+                      to="/seller/enquiries"
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                    >
+                      Respond
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

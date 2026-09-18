@@ -69,7 +69,7 @@ export const PaymentStatusModal = ({
               Activating your plan...
             </h3>
             <p style={{ fontSize: '13.5px', color: 'var(--slate)', margin: 0, lineHeight: 1.5 }}>
-              Connecting to the SmartNest activation workflow. Please do not close or refresh this window.
+              Please do not close or refresh this window while we activate your subscription plan.
             </p>
           </div>
         )}
@@ -94,7 +94,7 @@ export const PaymentStatusModal = ({
               </div>
             </div>
             <h3 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
-              Plan Activated Successfully
+              Subscription Activated
             </h3>
             <p style={{ fontSize: '14px', color: 'var(--slate)', margin: '0 0 20px 0' }}>
               Your plan is now active with immediate entitlement access.
@@ -173,7 +173,7 @@ export const PaymentStatusModal = ({
               Activation Unsuccessful
             </h3>
             <p style={{ fontSize: '13.5px', color: 'var(--slate)', margin: '0 0 24px 0', lineHeight: 1.5 }}>
-              {error || 'The subscription could not be activated at this moment. Please try again.'}
+              {error || 'The subscription could not be activated. Your account was not changed.'}
             </p>
 
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -225,10 +225,10 @@ export const PaymentStatusModal = ({
               </div>
             </div>
             <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
-              Payment Cancelled
+              Activation Cancelled
             </h3>
             <p style={{ fontSize: '13.5px', color: 'var(--slate)', margin: '0 0 24px 0', lineHeight: 1.5 }}>
-              Payment was cancelled. Your current plan has not been changed.
+              Subscription activation was cancelled. Your current plan has not been changed.
             </p>
 
             <button

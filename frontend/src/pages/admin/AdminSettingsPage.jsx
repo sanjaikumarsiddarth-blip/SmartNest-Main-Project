@@ -8,9 +8,7 @@ import {
   Bell,
   Cpu,
   Layers,
-  Check,
-  Send,
-  Radio
+  Check
 } from 'lucide-react';
 
 export const AdminSettingsPage = () => {
@@ -27,42 +25,8 @@ export const AdminSettingsPage = () => {
     newListingSubmitted: true,
     userReportFiled: true,
     dailyOpsDigest: false,
-    leadConversionAlert: true,
-    subscriptionWebhookAlert: true
+    leadConversionAlert: true
   });
-
-  const [testingWebhook, setTestingWebhook] = useState(false);
-  const [testingSubWebhook, setTestingSubWebhook] = useState(false);
-
-  const handleTestSubscriptionWebhook = async () => {
-    setTestingSubWebhook(true);
-    try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      const res = await fetch(`${backendUrl}/subscriptions/test-webhook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (data?.webhook_result?.dispatched) {
-        addToast({
-          type: 'success',
-          message: `Subscription webhook triggered! HTTP ${data.webhook_result?.statusCode || 200}`
-        });
-      } else {
-        addToast({
-          type: 'info',
-          message: data?.message || 'Test trigger dispatched to Subscription Webhook.'
-        });
-      }
-    } catch (err) {
-      addToast({
-        type: 'warning',
-        message: 'Dispatched test subscription payload.'
-      });
-    } finally {
-      setTestingSubWebhook(false);
-    }
-  };
 
   const toggleAccordion = (key) => {
     setOpenAccordions((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -74,36 +38,6 @@ export const AdminSettingsPage = () => {
       addToast({ type: 'info', message: 'Notification preferences updated.' });
       return updated;
     });
-  };
-
-  const handleTestWebhook = async () => {
-    setTestingWebhook(true);
-    try {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      const res = await fetch(`${backendUrl}/leads/test-webhook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (data?.webhook_result?.dispatched) {
-        addToast({
-          type: 'success',
-          message: `Webhook triggered successfully! HTTP ${data.webhook_result?.statusCode || 200}`
-        });
-      } else {
-        addToast({
-          type: 'info',
-          message: data?.message || 'Test trigger dispatched to SNS iHub Agent.'
-        });
-      }
-    } catch (err) {
-      addToast({
-        type: 'warning',
-        message: 'Dispatched test payload via fallback agent channel.'
-      });
-    } finally {
-      setTestingWebhook(false);
-    }
   };
 
   return (
@@ -268,62 +202,19 @@ export const AdminSettingsPage = () => {
                 { key: 'newListingSubmitted', label: 'New Property Listing Submitted', desc: 'Alert admins immediately when a seller registers a property awaiting approval.' },
                 { key: 'userReportFiled', label: 'Listing Compliance Report Filed', desc: 'Send urgent notification when a buyer flags acoustic or pricing discrepancies.' },
                 { key: 'dailyOpsDigest', label: 'Daily Ops Intelligence Digest', desc: 'Summary of new buyer signups, total recommendations, and health metrics.' },
-                { key: 'leadConversionAlert', label: 'High-Intent Buyer Enquiries (Seller Leads)', desc: 'Trigger seller-side webhook whenever 95%+ match leads reach out to developers.' },
-                { key: 'subscriptionWebhookAlert', label: 'Subscription Activations & Upgrades', desc: 'Trigger agent workflow webhook when a seller or buyer purchases or upgrades a subscription plan.' }
+                { key: 'leadConversionAlert', label: 'High-Intent Buyer Enquiries', desc: 'Trigger webhook whenever 95%+ match leads reach out to developers.' }
               ].map((item) => (
-                <div key={item.key} style={{ padding: '14px 16px', backgroundColor: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>{item.label}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--slate)' }}>{item.desc}</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={notifications[item.key]}
-                      onChange={() => handleToggleNotification(item.key)}
-                      style={{ width: '20px', height: '20px', accentColor: 'var(--teal)', cursor: 'pointer' }}
-                    />
+                <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>{item.label}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--slate)' }}>{item.desc}</div>
                   </div>
-
-                  {item.key === 'leadConversionAlert' && (
-                    <div style={{ marginTop: '4px', paddingTop: '10px', borderTop: '1px dashed #E2E8F0', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#0F766E', backgroundColor: '#F0FDFA', padding: '4px 10px', borderRadius: '4px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        <Radio size={14} className="animate-pulse" />
-                        <span style={{ fontWeight: 600 }}>Seller Webhook:</span>
-                        <code style={{ fontSize: '11px', color: '#0D9488' }}>https://api.agents.snsihub.ai/webhook/f3cfc0da-92a5-4c1d-992e-d5f668a47f4b</code>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestWebhook}
-                        disabled={testingWebhook}
-                        className="btn btn-secondary btn-sm"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
-                      >
-                        <Send size={12} />
-                        {testingWebhook ? 'Testing...' : 'Test Seller Webhook'}
-                      </button>
-                    </div>
-                  )}
-
-                  {item.key === 'subscriptionWebhookAlert' && (
-                    <div style={{ marginTop: '4px', paddingTop: '10px', borderTop: '1px dashed #E2E8F0', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#1E40AF', backgroundColor: '#EFF6FF', padding: '4px 10px', borderRadius: '4px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        <Radio size={14} className="animate-pulse" />
-                        <span style={{ fontWeight: 600 }}>Subscription Webhook:</span>
-                        <code style={{ fontSize: '11px', color: '#2563EB' }}>https://api.agents.snsihub.ai/webhook/61316be1-7b40-45a7-929e-992052a0274e</code>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestSubscriptionWebhook}
-                        disabled={testingSubWebhook}
-                        className="btn btn-secondary btn-sm"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 12px' }}
-                      >
-                        <Send size={12} />
-                        {testingSubWebhook ? 'Testing...' : 'Test Subscription Webhook'}
-                      </button>
-                    </div>
-                  )}
+                  <input
+                    type="checkbox"
+                    checked={notifications[item.key]}
+                    onChange={() => handleToggleNotification(item.key)}
+                    style={{ width: '20px', height: '20px', accentColor: 'var(--teal)', cursor: 'pointer' }}
+                  />
                 </div>
               ))}
             </div>
